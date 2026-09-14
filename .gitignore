@@ -7,3 +7,7 @@ build/
 app/build/
 *.apk
 *.aab
+*.jks
+*.keystore
+*.key
+signing.properties
