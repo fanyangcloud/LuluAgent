@@ -28,6 +28,18 @@
 
 </div>
 
+## 🎬 实机演示
+
+<p align="center">
+  <img src="docs/github_demo.gif" width="340" alt="鹿鹿实机运行演示" />
+</p>
+
+<p align="center">
+  <sub>1.25x 真实运行演示：端侧感知 → DeepSeek 智能研判 → 拟人手势破冰打招呼</sub>
+</p>
+
+---
+
 ## 📱 界面一览
 
 <p align="center">
