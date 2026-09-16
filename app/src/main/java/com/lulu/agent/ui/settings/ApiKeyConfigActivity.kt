@@ -10,20 +10,27 @@ import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
+import com.lulu.agent.R
 import com.lulu.agent.data.local.AppDatabase
 import com.lulu.agent.data.pref.AppSettings
 import com.lulu.agent.data.pref.EncryptedDataStore
 import com.lulu.agent.data.repository.ConfigRepository
 import com.lulu.agent.data.repository.JobRepository
 import com.lulu.agent.llm.DeepSeekClient
+import com.lulu.agent.llm.config.ApiProtocol
+import com.lulu.agent.llm.config.LlmConfig
 import com.lulu.agent.llm.limiter.TokenUsageTracker
 import com.lulu.agent.llm.prompt.PromptManager
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * DeepSeek API Key 凭证配置 (高质感精炼版)
+ * OpenAI 兼容 API 配置（保留现有设置页风格）
  */
 class ApiKeyConfigActivity : AppCompatActivity() {
 
@@ -39,6 +46,12 @@ class ApiKeyConfigActivity : AppCompatActivity() {
     private lateinit var deepSeekClient: DeepSeekClient
 
     private lateinit var keyInput: EditText
+    private lateinit var baseUrlInput: EditText
+    private lateinit var modelInput: EditText
+    private lateinit var protocolInput: Spinner
+    private lateinit var pingButton: TextView
+    private var testing = false
+    private var inputRevision = 0L
     private lateinit var statusBadgeLayout: LinearLayout
     private lateinit var statusDot: View
     private lateinit var testStatusTv: TextView
@@ -66,6 +79,19 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         initDependencies()
         buildUi()
         loadCurrentKey()
+        for (input in listOf(keyInput, baseUrlInput, modelInput)) {
+            input.doAfterTextChanged { configurationEdited() }
+        }
+        var selectedProtocol = protocolInput.selectedItemPosition
+        protocolInput.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (position != selectedProtocol) {
+                    selectedProtocol = position
+                    configurationEdited()
+                }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
     }
 
     private fun initDependencies() {
@@ -132,12 +158,12 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         inputCard.addView(inputLabel)
 
         keyInput = EditText(this).apply {
-            hint = "请输入 sk- 开头的密钥"
+            hint = "请输入服务商提供的 API Key"
             setHintTextColor(colorTextTip)
             textSize = 13f
             typeface = Typeface.MONOSPACE
             setTextColor(colorTextMain)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             background = GradientDrawable().apply {
                 cornerRadius = dp2px(10).toFloat()
                 setColor(colorInputBg)
@@ -151,6 +177,18 @@ class ApiKeyConfigActivity : AppCompatActivity() {
             ).apply { topMargin = dp2px(10) }
         }
         inputCard.addView(keyInput)
+        baseUrlInput = createConfigInput(inputCard, "Base URL（API 根地址）", "https://api.openai.com/v1/")
+        modelInput = createConfigInput(inputCard, "模型名称", "填写服务商支持的模型 ID")
+        inputCard.addView(TextView(this).apply {
+            text = "接口协议"
+            setTextColor(colorTextMain)
+            setPadding(0, dp2px(14), 0, dp2px(4))
+        })
+        protocolInput = Spinner(this).apply {
+            adapter = ArrayAdapter(this@ApiKeyConfigActivity, android.R.layout.simple_spinner_dropdown_item,
+                ApiProtocol.entries.map { it.label })
+        }
+        inputCard.addView(protocolInput)
 
         // 状态胶囊徽章 (美化重构核心)
         statusBadgeLayout = createStatusBadge()
@@ -178,6 +216,7 @@ class ApiKeyConfigActivity : AppCompatActivity() {
             ).apply { topMargin = dp2px(14) }
             setOnClickListener { performPingTest() }
         }
+        pingButton = pingBtn
         inputCard.addView(pingBtn)
 
         container.addView(inputCard)
@@ -206,7 +245,7 @@ class ApiKeyConfigActivity : AppCompatActivity() {
 
         // 6. 安全说明脚注
         val tipFooter = TextView(this).apply {
-            text = "密钥经 Android Keystore (AES-256) 本地加密，直接请求官方节点。"
+            text = getString(R.string.llm_config_footer)
             textSize = 11f
             setTextColor(colorTextTip)
             gravity = Gravity.CENTER
@@ -244,7 +283,7 @@ class ApiKeyConfigActivity : AppCompatActivity() {
             }
 
             val title = TextView(this@ApiKeyConfigActivity).apply {
-                text = "DeepSeek 凭证配置"
+                text = getString(R.string.llm_config_title)
                 textSize = 18f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(colorTextMain)
@@ -277,7 +316,7 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         }
 
         val guideTitle = TextView(this).apply {
-            text = "获取途径"
+            text = "配置说明"
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(colorTextMain)
@@ -286,7 +325,7 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         }
 
         val copyLinkBtn = TextView(this).apply {
-            text = "复制官网地址"
+            text = getString(R.string.llm_deepseek_console)
             textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(colorPrimaryDark)
@@ -309,7 +348,7 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         card.addView(topRow)
 
         val stepsText = TextView(this).apply {
-            text = "1. 浏览器访问 platform.deepseek.com 并登录\n2. 点击左侧「API keys」→「创建 API key」并复制填入下方"
+            text = getString(R.string.llm_config_guide)
             textSize = 12f
             setTextColor(colorTextSub)
             setLineSpacing(dp2px(3).toFloat(), 1.0f)
@@ -411,49 +450,77 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         testStatusTv.text = message
     }
 
-    private fun loadCurrentKey() {
-        val currentKey = configRepository.getDeepSeekApiKey()
-        if (currentKey.isNotEmpty()) {
-            keyInput.setText(currentKey)
-            val masked = if (currentKey.length > 12) {
-                "${currentKey.take(7)}...${currentKey.takeLast(4)}"
-            } else currentKey
-            updateStatusBadge(BadgeStatus.CONFIGURED, "已配置 ($masked)")
-        } else {
-            updateStatusBadge(BadgeStatus.UNCONFIGURED, "未配置 API Key")
+    private fun createConfigInput(card: LinearLayout, label: String, placeholder: String): EditText {
+        card.addView(TextView(this).apply {
+            text = label
+            textSize = 13f
+            setTextColor(colorTextMain)
+            setPadding(0, dp2px(14), 0, dp2px(4))
+        })
+        return EditText(this).apply {
+            hint = placeholder
+            textSize = 13f
+            setTextColor(colorTextMain)
+            setHintTextColor(colorTextTip)
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            card.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
     }
 
+    private fun configurationEdited() {
+        inputRevision++
+        updateStatusBadge(BadgeStatus.UNCONFIGURED, "配置已更改，请重新测试")
+    }
+
+    private fun readConfig(): LlmConfig = LlmConfig(
+        baseUrlInput.text.toString(), keyInput.text.toString(), modelInput.text.toString(),
+        ApiProtocol.entries[protocolInput.selectedItemPosition]
+    ).validated()
+
+    private fun loadCurrentKey() {
+        val stored = runCatching { configRepository.getLlmConfig() }
+        val config = stored.getOrDefault(LlmConfig())
+        keyInput.setText(config.apiKey)
+        baseUrlInput.setText(config.baseUrl)
+        modelInput.setText(config.model)
+        protocolInput.setSelection(config.protocol.ordinal)
+        updateStatusBadge(BadgeStatus.CONFIGURED,
+            if (stored.isFailure) "配置读取失败，请重新填写" else if (config.apiKey.isBlank()) "未配置 API Key" else "配置已载入，尚未测试")
+    }
+
     private fun performPingTest() {
-        val inputKey = keyInput.text.toString().trim()
-        if (inputKey.isBlank()) {
-            Toast.makeText(this, "请先输入 API Key", Toast.LENGTH_SHORT).show()
+        if (testing) return
+        val config = try { readConfig() } catch (e: IllegalArgumentException) {
+            updateStatusBadge(BadgeStatus.FAILED, e.message ?: "配置无效")
             return
         }
-
-        updateStatusBadge(BadgeStatus.TESTING, "正在连接官方节点...")
-
+        val revision = inputRevision
+        testing = true
+        pingButton.isEnabled = false
+        updateStatusBadge(BadgeStatus.TESTING, "正在测试所选接口...")
         lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                deepSeekClient.testConnection(inputKey)
+            try {
+                val result = withContext(Dispatchers.IO) { deepSeekClient.testConnection(config) }
+                if (inputRevision != revision) return@launch
+                result.fold(
+                    onSuccess = { updateStatusBadge(BadgeStatus.SUCCESS, "连通正常 · 模型响应就绪") },
+                    onFailure = { error -> updateStatusBadge(BadgeStatus.FAILED, error.message ?: "测试失败，请检查 API 配置") }
+                )
+            } finally {
+                testing = false
+                pingButton.isEnabled = true
             }
-            result.fold(
-                onSuccess = {
-                    updateStatusBadge(BadgeStatus.SUCCESS, "连通正常 · DeepSeek 响应就绪")
-                    Toast.makeText(this@ApiKeyConfigActivity, "连通测试通过！", Toast.LENGTH_SHORT).show()
-                },
-                onFailure = { err ->
-                    val errMsg = err.message?.take(20) ?: "网络异常"
-                    updateStatusBadge(BadgeStatus.FAILED, "连通失败 ($errMsg)")
-                }
-            )
         }
     }
 
     private fun saveKey() {
-        val inputKey = keyInput.text.toString().trim()
-        configRepository.setDeepSeekApiKey(inputKey)
-        Toast.makeText(this, "凭证已安全保存", Toast.LENGTH_SHORT).show()
+        val config = try { readConfig() } catch (e: IllegalArgumentException) {
+            updateStatusBadge(BadgeStatus.FAILED, e.message ?: "配置无效")
+            return
+        }
+        configRepository.setLlmConfig(config)
+        Toast.makeText(this, "配置已安全保存", Toast.LENGTH_SHORT).show()
         finish()
     }
 

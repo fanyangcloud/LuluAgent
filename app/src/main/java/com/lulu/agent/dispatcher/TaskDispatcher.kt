@@ -263,8 +263,8 @@ class TaskDispatcher(
                 processedJobKeys.add(job.resolveJobId())
 
                 // 阶段二：DeepSeek 评估
-                safeTransitionTo(EngineState.THINKING, "DeepSeek 评估中")
-                broadcastStepLog("🧠 DeepSeek 正在评估【${job.companyName} - ${job.title}】...")
+                safeTransitionTo(EngineState.THINKING, "模型评估中")
+                broadcastStepLog("🧠 模型正在评估【${job.companyName} - ${job.title}】...")
                 val evalResult = evaluatorAgent.evaluate(job)
 
                 humanDelay(1000L, 200L)

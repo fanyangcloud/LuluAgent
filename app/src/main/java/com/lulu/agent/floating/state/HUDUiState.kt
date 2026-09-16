@@ -7,7 +7,7 @@ data class HUDUiState(
     val stateTitle: String = "空闲就绪",
     val indicatorColorHex: String = "#9E9E9E",
     val currentTargetJob: String = "等待探寻岗位",
-    val deepSeekThought: String = "DeepSeek 思考引擎就绪...",
+    val deepSeekThought: String = "模型思考引擎就绪...",
     val todayCommunicatedCount: Int = 0,
     val isOperating: Boolean = false,
     val isPaused: Boolean = false,

@@ -41,7 +41,7 @@
         <activity
             android:name=".ui.settings.ApiKeyConfigActivity"
             android:exported="false"
-            android:label="DeepSeek 凭证配置" />
+            android:label="@string/llm_config_title" />
 
         <!-- 个人简历编辑页 -->
         <activity

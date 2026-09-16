@@ -100,8 +100,28 @@ app/src/main/java/com/lulu/agent/
 
 1. **下载安装**：前往 [Releases 页面](../../releases) 下载最新的 `LuluAgent-v1.0.0.apk` 安装到 Android 手机（Android 8.0+）。
 2. **开启权限**：首次打开应用，根据首页指引开启 **无障碍权限（敲门开路）** 与 **悬浮窗权限（悄悄支招）**。
-3. **配置凭证**：点击右上角齿轮「百宝袋」，填入你的 **DeepSeek API Key**（支持一键连通性测试），并粘贴你的 Markdown 格式简历。
+3. **配置凭证**：点击右上角齿轮「百宝袋」，在「模型 API 配置」中填入服务商的 **API Key、Base URL、模型名和接口协议**（默认 DeepSeek，支持一键连通性测试），并粘贴你的 Markdown 格式简历。
 4. **开启探路**：点击主页 **【启动鹿鹿 · 开始探路】**，鹿鹿将自动拉起 Boss 直聘，在后台贴心为你筛选、评估与破冰沟通！
+
+---
+
+## 模型 API 配置
+
+支持 OpenAI 兼容的 **Chat Completions**（`/chat/completions`）和 **Responses**（`/responses`）两种协议。岗位评估、话术生成和连通测试均使用当前配置；修改保存后无需重启。升级时保留原有 DeepSeek Key 和默认设置。
+
+| 服务 | Base URL | 模型 | 协议 |
+| --- | --- | --- | --- |
+| DeepSeek（默认） | `https://api.deepseek.com/` | `deepseek-chat` | Chat Completions |
+| OpenAI | `https://api.openai.com/v1/` | 账户可用且支持所选接口与 JSON 输出的模型 ID | Chat Completions 或 Responses |
+| 其他兼容服务 | 服务商提供的 HTTPS API 根地址 | 服务商提供的模型 ID | 服务商支持的协议 |
+
+Base URL 应保留服务商要求的路径前缀（例如 `/v1/`），但不要追加 `chat/completions` 或 `responses`，应用会按所选协议拼接。两种协议不会自动互相回退，旧的纯文本 `/completions` 不在支持范围内。
+
+连通测试使用页面当前填写的配置，不会自动保存；返回符合预期的 JSON 才算成功。API Key 在本地加密保存，请求直接发送到配置的服务地址。
+
+当前仅支持非流式文本及 JSON 对象输出。Chat Completions 使用 `response_format`，Responses 使用 `text.format` 且设置 `store: false`；不支持对应 JSON 输出参数的第三方服务暂不兼容。除默认 DeepSeek Chat 外，省略可选的 temperature 参数，以兼容不接受该参数的模型。
+
+**费用限制：** Token 用量按所选协议解析，但费用估算与预算保护仍沿用 DeepSeek 的参考价格，不代表其他服务商的真实账单，也不能保证实际支出不超过显示的预算。
 
 ---
 

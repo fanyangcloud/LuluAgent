@@ -75,7 +75,7 @@ class ResumeEditorActivity : AppCompatActivity() {
         }
 
         val descTv = TextView(this).apply {
-            text = "📝 请填入你的个人简历（建议 Markdown 格式）。DeepSeek 会根据你的真实技术栈与项目成果对目标岗位进行契合度打分，并构思针对性的破冰开场白。"
+            text = "📝 请填入你的个人简历（建议 Markdown 格式）。模型会根据你的真实技术栈与项目成果对目标岗位进行契合度打分，并构思针对性的破冰开场白。"
             textSize = 12f
             setTextColor(colorTextSub)
             setLineSpacing(dp2px(3).toFloat(), 1.0f)
