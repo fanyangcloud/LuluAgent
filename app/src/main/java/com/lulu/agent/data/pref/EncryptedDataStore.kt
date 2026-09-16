@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.lulu.agent.llm.config.LlmConfig
 
 class EncryptedDataStore(context: Context) {
 
@@ -19,16 +20,27 @@ class EncryptedDataStore(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
-    fun getDeepSeekApiKey(): String {
-        return securePrefs.getString(KEY_DEEPSEEK_API_KEY, "")?.trim() ?: ""
-    }
+    @Synchronized
+    fun getLlmConfig(): LlmConfig = LlmConfig.fromStored(
+        securePrefs.getString(KEY_DEEPSEEK_API_KEY, ""),
+        securePrefs.getString("llm_base_url", null),
+        securePrefs.getString("llm_model", null),
+        securePrefs.getString("llm_protocol", null)
+    )
 
-    fun setDeepSeekApiKey(apiKey: String) {
-        securePrefs.edit().putString(KEY_DEEPSEEK_API_KEY, apiKey.trim()).apply()
+    @Synchronized
+    fun setLlmConfig(config: LlmConfig) {
+        val value = config.validated()
+        securePrefs.edit()
+            .putString(KEY_DEEPSEEK_API_KEY, value.apiKey)
+            .putString("llm_base_url", value.baseUrl)
+            .putString("llm_model", value.model)
+            .putString("llm_protocol", value.protocol.name)
+            .apply()
     }
 
     fun hasValidApiKey(): Boolean {
-        return getDeepSeekApiKey().isNotEmpty()
+        return runCatching { getLlmConfig().validated() }.isSuccess
     }
 
     fun getResumeMarkdown(): String {

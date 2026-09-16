@@ -1,4 +1,8 @@
 <resources>
     <string name="app_name">鹿鹿</string>
     <string name="accessibility_service_description">鹿鹿自动化求职助手服务，用于屏幕感知与拟人化交互。</string>
+    <string name="llm_config_title">模型 API 配置</string>
+    <string name="llm_deepseek_console">DeepSeek 控制台</string>
+    <string name="llm_config_footer">密钥经 Android Keystore 本地加密，请求发送至你配置的服务地址。\n费用估算仍采用 DeepSeek 参考价格，不代表其他模型的真实费用或可靠的消费上限。</string>
+    <string name="llm_config_guide">填写服务商的 API Key、API 根地址和模型名，并选择支持的协议。\nOpenAI 的根地址为 https://api.openai.com/v1/；不要追加 chat/completions 或 responses。\n默认配置继续使用 DeepSeek，模型需要支持 JSON 输出。</string>
 </resources>

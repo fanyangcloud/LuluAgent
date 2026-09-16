@@ -147,7 +147,7 @@ class FloatingHUDService : Service() {
                     val formatted = "[$source] $msg"
 
                     var updated = currentState.appendLog(formatted)
-                    if (msg.contains("DeepSeek") || msg.contains("评估") || msg.contains("构思")) {
+                    if (msg.contains("模型") || msg.contains("评估") || msg.contains("构思")) {
                         updated = updated.copy(deepSeekThought = msg)
                     }
                     if (msg.contains("成功向")) {

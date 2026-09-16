@@ -53,7 +53,7 @@ class EvaluatorAgent(
         jobRepository.recordDiscoveredJob(rawJob.toJobEntity(JobEntity.STATUS_DISCOVERED))
 
         // 3. DeepSeek 大模型深度语义打分
-        sendAgentLog("🚀 呈送 DeepSeek 进行深度技术栈与风险推演...")
+        sendAgentLog("🚀 交给模型进行深度技术栈与风险推演...")
         val llmResult = deepSeekClient.evaluateJob(rawJob)
 
         return llmResult.fold(

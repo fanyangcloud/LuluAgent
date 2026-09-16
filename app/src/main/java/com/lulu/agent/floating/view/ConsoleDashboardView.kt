@@ -126,7 +126,7 @@ class ConsoleDashboardView(context: Context) : FrameLayout(context) {
         }
 
         val thoughtBadge = TextView(context).apply {
-            text = "🧠 DeepSeek 推理思考流:"
+            text = "🧠 模型推理思考流:"
             textSize = 10f
             setTextColor(Color.parseColor("#B388FF"))
         }

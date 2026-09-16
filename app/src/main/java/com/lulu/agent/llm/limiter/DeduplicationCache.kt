@@ -23,24 +23,24 @@ object DeduplicationCache {
     /**
      * 获取缓存中的评估结果
      */
-    fun getCachedEvaluation(rawJd: String): JDEvalResponse? {
+    fun getCachedEvaluation(rawJd: String, scope: String): JDEvalResponse? {
         if (rawJd.isBlank()) return null
-        val key = computeFingerprint(rawJd)
+        val key = "$scope:${computeFingerprint(rawJd)}"
         return memoryCache.get(key)
     }
 
     /**
      * 写入缓存
      */
-    fun putEvaluation(rawJd: String, response: JDEvalResponse) {
+    fun putEvaluation(rawJd: String, response: JDEvalResponse, scope: String) {
         if (rawJd.isBlank()) return
-        val key = computeFingerprint(rawJd)
+        val key = "$scope:${computeFingerprint(rawJd)}"
         memoryCache.put(key, response)
     }
 
-    fun contains(rawJd: String): Boolean {
+    fun contains(rawJd: String, scope: String): Boolean {
         if (rawJd.isBlank()) return false
-        val key = computeFingerprint(rawJd)
+        val key = "$scope:${computeFingerprint(rawJd)}"
         return memoryCache.get(key) != null
     }
 

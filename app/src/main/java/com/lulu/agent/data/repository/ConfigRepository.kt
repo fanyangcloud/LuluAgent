@@ -2,13 +2,14 @@ package com.lulu.agent.data.repository
 
 import com.lulu.agent.data.pref.AppSettings
 import com.lulu.agent.data.pref.EncryptedDataStore
+import com.lulu.agent.llm.config.LlmConfig
 
 class ConfigRepository(
     private val encryptedDataStore: EncryptedDataStore,
     private val appSettings: AppSettings
 ) {
-    fun getDeepSeekApiKey(): String = encryptedDataStore.getDeepSeekApiKey()
-    fun setDeepSeekApiKey(key: String) = encryptedDataStore.setDeepSeekApiKey(key)
+    fun getLlmConfig(): LlmConfig = encryptedDataStore.getLlmConfig()
+    fun setLlmConfig(config: LlmConfig) = encryptedDataStore.setLlmConfig(config)
     fun hasValidApiKey(): Boolean = encryptedDataStore.hasValidApiKey()
 
     fun getResumeMarkdown(): String = encryptedDataStore.getResumeMarkdown()

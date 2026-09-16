@@ -737,7 +737,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (!app.configRepository.hasValidApiKey()) {
-            Toast.makeText(this, "请先在右上角【设置】中配置 DeepSeek Key", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "请先在右上角【设置】中完成模型 API 配置", Toast.LENGTH_LONG).show()
             showSettingsDialog()
             return
         }
@@ -817,7 +817,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        container.addView(createSettingItem("🔑", "DeepSeek API Key 配置") {
+        container.addView(createSettingItem("🔑", "模型 API 配置") {
             startActivity(Intent(this, ApiKeyConfigActivity::class.java))
         })
         container.addView(createSettingItem("📝", "个人简历与背景设定") {

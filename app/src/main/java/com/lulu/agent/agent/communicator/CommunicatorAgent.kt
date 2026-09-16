@@ -50,7 +50,7 @@ class CommunicatorAgent(
         }
 
         // 2. 调用 DeepSeek 动态构思 50~90 字的针对性开场白
-        sendAgentLog("✍️ 正在让 DeepSeek 结合技术契合点构思破冰语...")
+        sendAgentLog("✍️ 正在让模型结合技术契合点构思破冰语...")
         val greetingResult = deepSeekClient.generateGreeting(rawJob, evaluatorResult.highlights)
 
         val greetingText = greetingResult.fold(

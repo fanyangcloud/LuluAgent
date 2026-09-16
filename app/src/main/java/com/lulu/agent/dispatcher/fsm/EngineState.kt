@@ -18,7 +18,7 @@ enum class EngineState(
     INSPECTING("提取岗位详情", false, "#00BCD4"),
 
     /** 思考中：DeepSeek 大模型正在进行语义打分与话术构建 (紫灯) */
-    THINKING("DeepSeek思考中", false, "#9C27B0"),
+    THINKING("模型思考中", false, "#9C27B0"),
 
     /** 交互中：正在自动点击沟通并填入破冰语 (绿灯) */
     COMMUNICATING("拟人化沟通过程", false, "#4CAF50"),
