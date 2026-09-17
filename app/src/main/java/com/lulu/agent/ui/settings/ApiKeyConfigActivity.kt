@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * OpenAI 兼容 API 配置（保留现有设置页风格）
+ * OpenAI 兼容 API 配置（极简小白友好 + 高级折叠版）
  */
 class ApiKeyConfigActivity : AppCompatActivity() {
 
@@ -49,13 +49,19 @@ class ApiKeyConfigActivity : AppCompatActivity() {
     private lateinit var baseUrlInput: EditText
     private lateinit var modelInput: EditText
     private lateinit var protocolInput: Spinner
+    private lateinit var advancedContainer: LinearLayout
+    private lateinit var toggleAdvancedBtn: TextView
     private lateinit var pingButton: TextView
+
     private var testing = false
     private var inputRevision = 0L
     private lateinit var statusBadgeLayout: LinearLayout
     private lateinit var statusDot: View
     private lateinit var testStatusTv: TextView
     private lateinit var progressBar: ProgressBar
+
+    // 本地测试状态缓存
+    private val testStatusPrefs by lazy { getSharedPreferences("llm_test_record", Context.MODE_PRIVATE) }
 
     // 规范视觉色盘
     private val colorBg = Color.parseColor("#F8F9FB")
@@ -79,6 +85,7 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         initDependencies()
         buildUi()
         loadCurrentKey()
+
         for (input in listOf(keyInput, baseUrlInput, modelInput)) {
             input.doAfterTextChanged { configurationEdited() }
         }
@@ -133,10 +140,10 @@ class ApiKeyConfigActivity : AppCompatActivity() {
             setPadding(p, dp2px(6), p, dp2px(32))
         }
 
-        // 3. 精炼复制指引卡片
+        // 3. 精炼获取指引卡片
         container.addView(createGuideCard())
 
-        // 4. API Key 配置核心卡片
+        // 4. API 配置核心卡片
         val inputCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = createCardDrawable()
@@ -158,7 +165,7 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         inputCard.addView(inputLabel)
 
         keyInput = EditText(this).apply {
-            hint = "请输入服务商提供的 API Key"
+            hint = "请输入 sk- 开头的 API Key"
             setHintTextColor(colorTextTip)
             textSize = 13f
             typeface = Typeface.MONOSPACE
@@ -177,24 +184,67 @@ class ApiKeyConfigActivity : AppCompatActivity() {
             ).apply { topMargin = dp2px(10) }
         }
         inputCard.addView(keyInput)
-        baseUrlInput = createConfigInput(inputCard, "Base URL（API 根地址）", "https://api.openai.com/v1/")
-        modelInput = createConfigInput(inputCard, "模型名称", "填写服务商支持的模型 ID")
-        inputCard.addView(TextView(this).apply {
+
+        // 🌟 进阶折叠容器：默认对小白隐藏，保留 PR 的所有可配置参数
+        advancedContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+
+        baseUrlInput = createConfigInput(advancedContainer, "Base URL（API 根地址）", "https://api.deepseek.com/")
+        modelInput = createConfigInput(advancedContainer, "模型名称", "deepseek-chat")
+
+        advancedContainer.addView(TextView(this).apply {
             text = "接口协议"
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(colorTextMain)
-            setPadding(0, dp2px(14), 0, dp2px(4))
+            setPadding(0, dp2px(12), 0, dp2px(4))
         })
         protocolInput = Spinner(this).apply {
             adapter = ArrayAdapter(this@ApiKeyConfigActivity, android.R.layout.simple_spinner_dropdown_item,
                 ApiProtocol.entries.map { it.label })
         }
-        inputCard.addView(protocolInput)
+        advancedContainer.addView(protocolInput)
 
-        // 状态胶囊徽章 (美化重构核心)
+        // 🌟 实体化次级按钮：高级设置折叠切换开关
+        toggleAdvancedBtn = TextView(this).apply {
+            text = "高级设置（自定义服务商 / 模型） ⌄"
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            setTextColor(colorTextSub)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp2px(8).toFloat()
+                setColor(colorInputBg)
+                setStroke(dp2px(1), Color.parseColor("#E5E8EC"))
+            }
+            val vPad = dp2px(9)
+            val hPad = dp2px(12)
+            setPadding(hPad, vPad, hPad, vPad)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp2px(12)
+                bottomMargin = dp2px(4)
+            }
+            setOnClickListener {
+                val willShow = advancedContainer.visibility == View.GONE
+                advancedContainer.visibility = if (willShow) View.VISIBLE else View.GONE
+                updateToggleBtnStyle(willShow)
+            }
+        }
+        inputCard.addView(toggleAdvancedBtn)
+        inputCard.addView(advancedContainer)
+
+        // 状态胶囊徽章
         statusBadgeLayout = createStatusBadge()
         inputCard.addView(statusBadgeLayout)
 
-        // 深度测试连接按钮 (清晰高对比度轮廓按钮)
+        // 深度测试连接按钮
         val pingBtn = TextView(this).apply {
             text = "测试连通性"
             textSize = 13f
@@ -263,8 +313,30 @@ class ApiKeyConfigActivity : AppCompatActivity() {
     }
 
     /**
-     * 顶部标题栏
+     * 高级设置按钮视觉切换
      */
+    private fun updateToggleBtnStyle(isExpanded: Boolean) {
+        if (isExpanded) {
+            toggleAdvancedBtn.text = "收起高级设置 ⌃"
+            toggleAdvancedBtn.setTextColor(colorPrimaryDark)
+            toggleAdvancedBtn.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp2px(8).toFloat()
+                setColor(colorPrimarySoft)
+                setStroke(dp2px(1), Color.parseColor("#F8C9BC"))
+            }
+        } else {
+            toggleAdvancedBtn.text = "高级设置（自定义服务商 / 模型） ⌄"
+            toggleAdvancedBtn.setTextColor(colorTextSub)
+            toggleAdvancedBtn.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp2px(8).toFloat()
+                setColor(colorInputBg)
+                setStroke(dp2px(1), Color.parseColor("#E5E8EC"))
+            }
+        }
+    }
+
     private fun createTopBar(): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -299,9 +371,6 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 精炼获取指引卡片
-     */
     private fun createGuideCard(): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -348,7 +417,7 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         card.addView(topRow)
 
         val stepsText = TextView(this).apply {
-            text = getString(R.string.llm_config_guide)
+            text = "默认使用 DeepSeek，请前往DeepSeek后台复制Key，粘贴至下方即可。\n如使用Claude、Chatgpt、Gemini 等，可展开高级设置修改。"
             textSize = 12f
             setTextColor(colorTextSub)
             setLineSpacing(dp2px(3).toFloat(), 1.0f)
@@ -363,9 +432,6 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         return card
     }
 
-    /**
-     * 状态指示胶囊 (Pill Badge)
-     */
     private fun createStatusBadge(): LinearLayout {
         val badge = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -450,22 +516,34 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         testStatusTv.text = message
     }
 
-    private fun createConfigInput(card: LinearLayout, label: String, placeholder: String): EditText {
-        card.addView(TextView(this).apply {
+    private fun createConfigInput(container: LinearLayout, label: String, placeholder: String): EditText {
+        container.addView(TextView(this).apply {
             text = label
             textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(colorTextMain)
-            setPadding(0, dp2px(14), 0, dp2px(4))
+            setPadding(0, dp2px(12), 0, dp2px(4))
         })
-        return EditText(this).apply {
+        val input = EditText(this).apply {
             hint = placeholder
             textSize = 13f
+            typeface = Typeface.MONOSPACE
             setTextColor(colorTextMain)
             setHintTextColor(colorTextTip)
             setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            card.addView(this, LinearLayout.LayoutParams(-1, -2))
+            background = GradientDrawable().apply {
+                cornerRadius = dp2px(10).toFloat()
+                setColor(colorInputBg)
+                setStroke(dp2px(1), Color.parseColor("#E5E8EC"))
+            }
+            val ep = dp2px(10)
+            setPadding(ep, ep, ep, ep)
         }
+        container.addView(input, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp2px(4)
+        })
+        return input
     }
 
     private fun configurationEdited() {
@@ -485,8 +563,37 @@ class ApiKeyConfigActivity : AppCompatActivity() {
         baseUrlInput.setText(config.baseUrl)
         modelInput.setText(config.model)
         protocolInput.setSelection(config.protocol.ordinal)
-        updateStatusBadge(BadgeStatus.CONFIGURED,
-            if (stored.isFailure) "配置读取失败，请重新填写" else if (config.apiKey.isBlank()) "未配置 API Key" else "配置已载入，尚未测试")
+
+        // 判断是否为非默认配置，若是则自动展开高级设置，否则默认折叠保持清爽
+        val isCustom = config.baseUrl != "https://api.deepseek.com/" ||
+                config.model != "deepseek-chat" ||
+                config.protocol != ApiProtocol.CHAT_COMPLETIONS
+
+        if (isCustom) {
+            advancedContainer.visibility = View.VISIBLE
+            updateToggleBtnStyle(true)
+        } else {
+            advancedContainer.visibility = View.GONE
+            updateToggleBtnStyle(false)
+        }
+
+        if (stored.isFailure) {
+            updateStatusBadge(BadgeStatus.FAILED, "配置读取失败，请重新填写")
+        } else if (config.apiKey.isBlank()) {
+            updateStatusBadge(BadgeStatus.UNCONFIGURED, "未配置 API Key")
+        } else {
+            val masked = if (config.apiKey.length > 12) {
+                "${config.apiKey.take(7)}...${config.apiKey.takeLast(4)}"
+            } else config.apiKey
+
+            // 🌟 核心改进 1：若该 Key 此前测试连通成功，直接显示绿色“已就绪”，拒绝显示“尚未测试”
+            val wasTested = testStatusPrefs.getBoolean("tested_${config.apiKey.trim()}", false)
+            if (wasTested) {
+                updateStatusBadge(BadgeStatus.SUCCESS, "连通正常 · 已就绪 ($masked)")
+            } else {
+                updateStatusBadge(BadgeStatus.CONFIGURED, "已配置 ($masked)")
+            }
+        }
     }
 
     private fun performPingTest() {
@@ -504,8 +611,14 @@ class ApiKeyConfigActivity : AppCompatActivity() {
                 val result = withContext(Dispatchers.IO) { deepSeekClient.testConnection(config) }
                 if (inputRevision != revision) return@launch
                 result.fold(
-                    onSuccess = { updateStatusBadge(BadgeStatus.SUCCESS, "连通正常 · 模型响应就绪") },
-                    onFailure = { error -> updateStatusBadge(BadgeStatus.FAILED, error.message ?: "测试失败，请检查 API 配置") }
+                    onSuccess = {
+                        testStatusPrefs.edit().putBoolean("tested_${config.apiKey.trim()}", true).apply()
+                        updateStatusBadge(BadgeStatus.SUCCESS, "连通正常 · 模型响应就绪")
+                    },
+                    onFailure = { error ->
+                        testStatusPrefs.edit().putBoolean("tested_${config.apiKey.trim()}", false).apply()
+                        updateStatusBadge(BadgeStatus.FAILED, error.message ?: "测试失败，请检查 API 配置")
+                    }
                 )
             } finally {
                 testing = false

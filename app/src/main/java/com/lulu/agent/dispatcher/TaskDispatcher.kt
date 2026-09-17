@@ -68,6 +68,9 @@ class TaskDispatcher(
         // 真实 UI 锚点 ID
         private const val ID_TAB_JOB = "com.hpbr.bosszhipin:id/cl_tab_1"
         private const val ID_TAB_LABEL = "com.hpbr.bosszhipin:id/tv_tab_label"
+        private const val ID_FEED_LIST = "com.hpbr.bosszhipin:id/rv_list"
+        private const val ID_DETAIL_CHAT_BTN = "com.hpbr.bosszhipin:id/btn_chat"
+        private const val ID_CHAT_EDIT_TEXT = "com.hpbr.bosszhipin:id/editText_with_scrollbar"
     }
 
     init {
@@ -290,6 +293,7 @@ class TaskDispatcher(
 
                 // 阶段四：安全退回推荐列表
                 ensureInRecommendList()
+                safeTransitionTo(EngineState.SCANNING, "已回退列表，继续巡查")
                 humanDelay(800L, 200L)
             }
 
@@ -303,20 +307,42 @@ class TaskDispatcher(
     }
 
     /**
-     * 自愈场景守卫：优先后退；后退 2 次仍未脱困，直接启动 WelcomeActivity 复位
+     * 自愈场景守卫：精准识别真实页面，严防将 JD 详情页误判为推荐流
      */
     private suspend fun ensureInRecommendList(maxAttempts: Int = 3) {
         val service = BossAccessibilityService.instance ?: return
         var attempts = 0
 
         while (dispatcherScope.isActive && attempts < maxAttempts) {
-            if (currentScene == PageScene.RECOMMEND_LIST) {
-                return
+            val root = service.rootInActiveWindow
+            if (root != null) {
+                // 1. 详情页排查：如果有【立即沟通】按钮，说明绝对还在 JD 详情页，绝不能停！
+                val chatBtnNodes = root.findAccessibilityNodeInfosByViewId(ID_DETAIL_CHAT_BTN)
+                val isStillInDetail = !chatBtnNodes.isNullOrEmpty()
+                chatBtnNodes?.forEach { it.recycle() }
+
+                // 2. 聊天页排查：如果有输入框，说明还在聊天窗口
+                val chatInputNodes = root.findAccessibilityNodeInfosByViewId(ID_CHAT_EDIT_TEXT)
+                val isStillInChat = !chatInputNodes.isNullOrEmpty()
+                chatInputNodes?.forEach { it.recycle() }
+
+                // 3. 首页特征校验：必须有底部导航栏【职位】Tab
+                val tabJobNodes = root.findAccessibilityNodeInfosByViewId(ID_TAB_JOB)
+                val isTabJobVisible = !tabJobNodes.isNullOrEmpty()
+                tabJobNodes?.forEach { it.recycle() }
+
+                root.recycle()
+
+                // 🌟 核心防线：只有【没有沟通按钮】、【没有聊天框】且【底部职位Tab就位】时，才算真正回到首页！
+                if (!isStillInDetail && !isStillInChat && isTabJobVisible) {
+                    currentScene = PageScene.RECOMMEND_LIST
+                    return
+                }
             }
 
-            Log.w(tag, "检测到未在推荐列表 (当前: $currentScene)，执行安全后退自愈 (第 ${attempts + 1} 次)...")
+            Log.w(tag, "检测到未在推荐列表（仍在详情页或聊天中），执行安全后退 (第 ${attempts + 1} 次)...")
             service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-            humanDelay(800L, 150L)
+            humanDelay(900L, 150L) // 留足 900ms 保证页面退回到位
             attempts++
         }
 
@@ -332,7 +358,6 @@ class TaskDispatcher(
     private suspend fun resetToRecommendFeed() {
         broadcastStepLog("🔄 正在执行基准线复位：定向拉起 WelcomeActivity...")
 
-        // 显式指定拉起公开的 WelcomeActivity
         val intent = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
             component = ComponentName(BOSS_PKG, BOSS_WELCOME_ACTIVITY)
@@ -346,23 +371,26 @@ class TaskDispatcher(
             Log.e(tag, "显式拉起 WelcomeActivity 失败: ${e.message}")
         }
 
-        // 预留 1200ms 等待 Boss 前台就绪
         humanDelay(1200L, 200L)
 
         val service = BossAccessibilityService.instance ?: return
 
-        // 清理顶层多余的子页面（如详情或聊天）
         var backPopTries = 0
         while (dispatcherScope.isActive && backPopTries < 3) {
-            val scene = currentScene
-            if (scene == PageScene.JOB_DETAIL || scene == PageScene.CHAT_WINDOW) {
-                Log.d(tag, "复位过程清理顶层页面: $scene，执行返回")
-                service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-                humanDelay(600L, 100L)
-                backPopTries++
-            } else {
-                break
+            val root = service.rootInActiveWindow
+            if (root != null) {
+                val hasDetail = root.findAccessibilityNodeInfosByViewId(ID_DETAIL_CHAT_BTN).isNotEmpty()
+                val hasChat = root.findAccessibilityNodeInfosByViewId(ID_CHAT_EDIT_TEXT).isNotEmpty()
+                root.recycle()
+                if (hasDetail || hasChat) {
+                    Log.d(tag, "复位过程清理顶层页面，执行返回")
+                    service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+                    humanDelay(600L, 100L)
+                    backPopTries++
+                    continue
+                }
             }
+            break
         }
 
         // UI 锚点校准：校准底部 Tab 1【职位】

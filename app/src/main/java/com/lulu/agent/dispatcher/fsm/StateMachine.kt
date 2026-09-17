@@ -34,13 +34,15 @@ class StateMachine(initialState: EngineState = EngineState.IDLE) {
                 return target == EngineState.SCANNING || target == EngineState.IDLE
             }
 
-            // 规则 4：通用状态流转白名单
+            // 规则 4：通用状态流转白名单 (优化防御性流转)
             return when (currentState) {
                 EngineState.IDLE -> target == EngineState.SCANNING
                 EngineState.SCANNING -> target == EngineState.INSPECTING || target == EngineState.PAUSED || target == EngineState.IDLE
                 EngineState.INSPECTING -> target == EngineState.THINKING || target == EngineState.SCANNING || target == EngineState.PAUSED
-                EngineState.THINKING -> target == EngineState.COMMUNICATING || target == EngineState.SCANNING || target == EngineState.PAUSED
-                EngineState.COMMUNICATING -> target == EngineState.SCANNING || target == EngineState.PAUSED || target == EngineState.IDLE
+                // 🌟 容错：允许评估后直接进入下一个卡片的提取，或重置
+                EngineState.THINKING -> target == EngineState.COMMUNICATING || target == EngineState.INSPECTING || target == EngineState.SCANNING || target == EngineState.PAUSED
+                // 🌟 容错：沟通完成后，既允许回 SCANNING，也允许极端情况下直接处理下一个卡片的 INSPECTING
+                EngineState.COMMUNICATING -> target == EngineState.SCANNING || target == EngineState.INSPECTING || target == EngineState.PAUSED || target == EngineState.IDLE
                 else -> false
             }
         }
