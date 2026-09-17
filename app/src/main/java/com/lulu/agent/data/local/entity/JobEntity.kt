@@ -11,6 +11,7 @@ import androidx.room.PrimaryKey
         Index(value = ["job_id"], unique = true),
         Index(value = ["company_name"]),
         Index(value = ["status"]),
+        Index(value = ["is_chat_closed"]),
         Index(value = ["updated_at"])
     ]
 )
@@ -63,6 +64,12 @@ data class JobEntity(
     @ColumnInfo(name = "status")
     val status: String = STATUS_DISCOVERED,
 
+    @ColumnInfo(name = "is_chat_closed")
+    val isChatClosed: Boolean = false, // 是否触发熔断或人工标记关闭（关闭后 Agent 不再介入此对话）
+
+    @ColumnInfo(name = "last_chat_timestamp")
+    val lastChatTimestamp: Long = 0L, // 最近一次对话交互时间
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
 
@@ -72,9 +79,10 @@ data class JobEntity(
     companion object {
         const val STATUS_DISCOVERED = "DISCOVERED"         // 列表刚扫描发现
         const val STATUS_FILTERED_OUT = "FILTERED_OUT"     // 触发本地规则被硬过滤(不耗Token)
-        const val STATUS_EVALUATED = "EVALUATED"           // DeepSeek 评估完毕
-        const val STATUS_COMMUNICATED = "COMMUNICATED"     // 已经成功打招呼沟通
-        const val STATUS_DELIVERED = "DELIVERED"           // 【新增】已投递/发送附件简历
-        const val STATUS_REJECTED = "REJECTED"             // 评估不合适或沟通后放弃
+        const val STATUS_EVALUATED = "EVALUATED"           // 模型评估完毕
+        const val STATUS_COMMUNICATED = "COMMUNICATED"     // 已经成功破冰打招呼
+        const val STATUS_CHATTING = "CHATTING"             // 【新增】正在深入多轮沟通中
+        const val STATUS_DELIVERED = "DELIVERED"           // 已投递/发送附件简历
+        const val STATUS_REJECTED = "REJECTED"             // 评估不合适或沟通后触发熔断婉拒
     }
 }

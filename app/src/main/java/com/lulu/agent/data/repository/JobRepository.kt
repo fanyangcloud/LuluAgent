@@ -1,11 +1,13 @@
 package com.lulu.agent.data.repository
 
 import com.lulu.agent.data.local.AppDatabase
+import com.lulu.agent.data.local.entity.ChatMessageEntity
 import com.lulu.agent.data.local.entity.CompanyEntity
 import com.lulu.agent.data.local.entity.JobEntity
 import com.lulu.agent.data.local.entity.LLMAuditLogEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.security.MessageDigest
 import java.util.Calendar
 
 class JobRepository(private val db: AppDatabase) {
@@ -13,6 +15,9 @@ class JobRepository(private val db: AppDatabase) {
     private val jobDao = db.jobDao()
     private val companyDao = db.companyDao()
     private val llmAuditDao = db.llmAuditDao()
+    private val chatMessageDao = db.chatMessageDao() // 🌟 注入聊天 DAO
+
+    // ==================== 1. 岗位发现与状态流转 ====================
 
     /**
      * 判定该岗位是否可以投递（既未沟通过，公司也不在黑名单）
@@ -56,7 +61,6 @@ class JobRepository(private val db: AppDatabase) {
         jobDao.updateStatus(jobId, JobEntity.STATUS_COMMUNICATED)
     }
 
-    // 🌟【新增】：将岗位标记为已完成投递流转
     suspend fun markJobDelivered(jobId: String) = withContext(Dispatchers.IO) {
         jobDao.updateStatus(jobId, JobEntity.STATUS_DELIVERED)
     }
@@ -83,6 +87,98 @@ class JobRepository(private val db: AppDatabase) {
             )
         )
     }
+
+    // ==================== 2. 多轮对话与上下文记忆（新增） ====================
+
+    /**
+     * 登记单条对话气泡记录（内置去重，防止每次进入房间重复写入旧消息）
+     */
+    suspend fun recordChatMessage(
+        jobId: String,
+        senderRole: String,
+        messageText: String,
+        timestamp: Long = System.currentTimeMillis()
+    ): Boolean = withContext(Dispatchers.IO) {
+        val cleanText = messageText.trim()
+        if (cleanText.isBlank()) return@withContext false
+
+        val exists = chatMessageDao.isMessageExists(jobId, senderRole, cleanText)
+        if (!exists) {
+            chatMessageDao.insertMessage(
+                ChatMessageEntity(
+                    jobId = jobId,
+                    senderRole = senderRole,
+                    messageText = cleanText,
+                    timestamp = timestamp,
+                    isProcessed = false
+                )
+            )
+            // 同步刷新岗位的最后活跃时间
+            jobDao.updateChatActivity(jobId = jobId, timestamp = timestamp)
+            true
+        } else {
+            false
+        }
+    }
+
+    /**
+     * 获取按时间正序排列的最近 N 轮对话历史（直接可注入 Prompt 作为上下文）
+     */
+    suspend fun getRecentChatHistory(jobId: String, limit: Int = 10): List<ChatMessageEntity> = withContext(Dispatchers.IO) {
+        chatMessageDao.getRecentMessages(jobId, limit).reversed()
+    }
+
+    /**
+     * 校验当前会话是否已被熔断关闭
+     */
+    suspend fun isChatClosed(jobId: String): Boolean = withContext(Dispatchers.IO) {
+        jobDao.isChatClosed(jobId) == true
+    }
+
+    /**
+     * 触发熔断：拉黑并关闭当前会话，避免后续 Agent 再次处理
+     */
+    suspend fun closeChatSession(jobId: String, reason: String) = withContext(Dispatchers.IO) {
+        jobDao.markChatClosed(jobId, reason)
+    }
+
+    /**
+     * 更新为正在深入沟通状态
+     */
+    suspend fun updateChatActivity(jobId: String) = withContext(Dispatchers.IO) {
+        jobDao.updateChatActivity(jobId)
+    }
+
+    /**
+     * 根据聊天界面顶部 Job Card 获取或动态创建 JobEntity
+     * 应对 HR 主动发起的沟通（数据库此前无记录的情况）
+     */
+    suspend fun findOrCreateJobFromChat(
+        title: String,
+        companyName: String,
+        salaryText: String
+    ): JobEntity = withContext(Dispatchers.IO) {
+        val cleanTitle = title.trim()
+        val cleanCompany = companyName.trim()
+        val cleanSalary = salaryText.trim()
+        val generatedJobId = md5("${cleanTitle}_${cleanCompany}_$cleanSalary")
+
+        var job = jobDao.findByJobId(generatedJobId)
+        if (job == null) {
+            job = JobEntity(
+                jobId = generatedJobId,
+                title = cleanTitle,
+                companyName = cleanCompany,
+                salaryText = cleanSalary,
+                status = JobEntity.STATUS_CHATTING,
+                lastChatTimestamp = System.currentTimeMillis()
+            )
+            jobDao.insertOrIgnore(job)
+        }
+        job
+    }
+
+    // ==================== 3. 大模型审计流水 ====================
 
     suspend fun recordLLMAudit(
         scene: String,
@@ -133,5 +229,11 @@ class JobRepository(private val db: AppDatabase) {
         calendar.set(Calendar.MILLISECOND, 999)
         val end = calendar.timeInMillis
         return Pair(start, end)
+    }
+
+    private fun md5(input: String): String {
+        val md = MessageDigest.getInstance("MD5")
+        val bytes = md.digest(input.toByteArray())
+        return bytes.joinToString("") { "%02x".format(it) }
     }
 }

@@ -25,20 +25,63 @@ interface JobDao {
     @Query("SELECT EXISTS(SELECT 1 FROM jobs WHERE job_id = :jobId)")
     suspend fun isJobExists(jobId: String): Boolean
 
-    // 🌟【修改】：已投递 (DELIVERED) 的岗位同样视为已沟通过，防止次日重复扫描发起
-    @Query("SELECT EXISTS(SELECT 1 FROM jobs WHERE job_id = :jobId AND status IN ('COMMUNICATED', 'DELIVERED'))")
+    /**
+     * 判定岗位是否已经发起过沟通或正在深度对话，防止重复打招呼
+     */
+    @Query("SELECT EXISTS(SELECT 1 FROM jobs WHERE job_id = :jobId AND status IN ('COMMUNICATED', 'DELIVERED', 'CHATTING'))")
     suspend fun isJobCommunicated(jobId: String): Boolean
 
-    // 🌟【修改】：沟通总量统计兼顾 COMMUNICATED 与 DELIVERED，确保每日打招呼上限配额准确扣减
-    @Query("SELECT COUNT(1) FROM jobs WHERE status IN ('COMMUNICATED', 'DELIVERED') AND updated_at >= :startTime AND updated_at <= :endTime")
+    /**
+     * 校验会话是否已被熔断关闭
+     */
+    @Query("SELECT is_chat_closed FROM jobs WHERE job_id = :jobId LIMIT 1")
+    suspend fun isChatClosed(jobId: String): Boolean?
+
+    /**
+     * 沟通总量统计兼顾 COMMUNICATED, DELIVERED, CHATTING
+     */
+    @Query("SELECT COUNT(1) FROM jobs WHERE status IN ('COMMUNICATED', 'DELIVERED', 'CHATTING') AND updated_at >= :startTime AND updated_at <= :endTime")
     suspend fun getCommunicatedCountBetween(startTime: Long, endTime: Long): Int
 
-    // 维持原样：专门统计投递成功的数量
     @Query("SELECT COUNT(1) FROM jobs WHERE status IN ('DELIVERED', 'RESUME_SENT') AND updated_at >= :startTime AND updated_at <= :endTime")
     suspend fun getDeliveredCountBetween(startTime: Long, endTime: Long): Int
 
     @Query("UPDATE jobs SET status = :status, updated_at = :updatedAt WHERE job_id = :jobId")
     suspend fun updateStatus(jobId: String, status: String, updatedAt: Long = System.currentTimeMillis())
+
+    /**
+     * 触发熔断：标记会话为关闭、状态更新为 REJECTED 并记录熔断原因
+     */
+    @Query("""
+        UPDATE jobs 
+        SET is_chat_closed = 1, 
+            status = 'REJECTED', 
+            eval_reason = :closeReason, 
+            updated_at = :updatedAt 
+        WHERE job_id = :jobId
+    """)
+    suspend fun markChatClosed(
+        jobId: String,
+        closeReason: String,
+        updatedAt: Long = System.currentTimeMillis()
+    )
+
+    /**
+     * 更新对话活跃状态及时间戳
+     */
+    @Query("""
+        UPDATE jobs 
+        SET status = :status, 
+            last_chat_timestamp = :timestamp, 
+            updated_at = :updatedAt 
+        WHERE job_id = :jobId
+    """)
+    suspend fun updateChatActivity(
+        jobId: String,
+        status: String = JobEntity.STATUS_CHATTING,
+        timestamp: Long = System.currentTimeMillis(),
+        updatedAt: Long = System.currentTimeMillis()
+    )
 
     @Query("""
         UPDATE jobs 
