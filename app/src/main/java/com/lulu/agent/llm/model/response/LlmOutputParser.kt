@@ -20,6 +20,31 @@ object LlmOutputParser {
             .also { require(it.isValid()) }
     }
 
+    /**
+     * 解析多轮对话深度答复与熔断决策
+     */
+    fun dialogue(raw: String): DialogueReplyResponse = parse(raw) { json ->
+        val decision = json.text("decision")
+        require(
+            decision in listOf(
+                DialogueReplyResponse.DECISION_CONTINUE,
+                DialogueReplyResponse.DECISION_SEND_RESUME,
+                DialogueReplyResponse.DECISION_ASK_INTERVIEW,
+                DialogueReplyResponse.DECISION_REJECT
+            )
+        )
+        val replyText = json.text("reply_text")
+        val reason = json.optText("reason")
+        val intentTag = json.optText("intent_tag")
+
+        DialogueReplyResponse(
+            decision = decision,
+            replyText = replyText,
+            reason = reason,
+            intentTag = intentTag
+        ).also { require(it.isValid()) }
+    }
+
     fun ping(raw: String): Boolean = parse(raw) { json ->
         require(json.text("status") == "ok")
         true
@@ -29,6 +54,11 @@ object LlmOutputParser {
         val value = get(name)
         require(value != null && value.isJsonPrimitive && value.asJsonPrimitive.isString)
         return value.asString
+    }
+
+    private fun JsonObject.optText(name: String): String {
+        val value = get(name) ?: return ""
+        return if (value.isJsonPrimitive && value.asJsonPrimitive.isString) value.asString else ""
     }
 
     private fun JsonObject.texts(name: String): List<String> {

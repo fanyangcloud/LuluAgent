@@ -2,6 +2,8 @@ package com.lulu.agent.llm
 
 import android.util.Log
 import com.lulu.agent.accessibility.model.ScrapedRawJob
+import com.lulu.agent.accessibility.model.UnreadChatSession
+import com.lulu.agent.data.local.entity.ChatMessageEntity
 import com.lulu.agent.data.local.entity.LLMAuditLogEntity
 import com.lulu.agent.data.repository.ConfigRepository
 import com.lulu.agent.data.repository.JobRepository
@@ -11,18 +13,14 @@ import com.lulu.agent.llm.limiter.DeduplicationCache
 import com.lulu.agent.llm.limiter.TokenUsageTracker
 import com.lulu.agent.llm.model.request.DeepSeekChatRequest
 import com.lulu.agent.llm.model.response.ChatGenerationResponse
+import com.lulu.agent.llm.model.response.DialogueReplyResponse
 import com.lulu.agent.llm.model.response.JDEvalResponse
 import com.lulu.agent.llm.model.response.LlmOutputParser
 import com.lulu.agent.llm.prompt.PromptManager
 import kotlinx.coroutines.CancellationException
 
 /**
- * 可配置双协议大模型网络门面单例（保留原类名以兼容调用方）
- *
- * 核心指标：
- * - 60s 完整超时门限
- * - 最多 3 次异常重试与指数退避
- * - 纯非流式结构化输出
+ * 可配置双协议大模型网络门面单例
  */
 class DeepSeekClient(
     private val configRepository: ConfigRepository,
@@ -106,7 +104,7 @@ class DeepSeekClient(
         val request = promptManager.buildEvaluationRequest(rawJob, model = config.model).copy(stream = false)
         val startTime = System.currentTimeMillis()
 
-        // 4. 执行 3 次重试网络调用
+        // 4. 执行网络调用
         val networkResult = apiResult {
             transport.generate(config, request.messages.first().content, request.messages.last().content, request.temperature)
         }
@@ -123,10 +121,7 @@ class DeepSeekClient(
                 try {
                     val evalResponse = LlmOutputParser.evaluation(rawJson)
 
-                    // 写入指纹缓存
                     DeduplicationCache.putEvaluation(jdText, evalResponse, scope)
-
-                    // 记录 Token 与数据库审计流水
                     tokenUsageTracker.recordTokens(promptTokens, completionTokens)
                     jobRepository.recordLLMAudit(
                         scene = LLMAuditLogEntity.SCENE_EVALUATE,
@@ -161,7 +156,7 @@ class DeepSeekClient(
     }
 
     /**
-     * 生成定制破冰问候语（同样配置 60s 超时与 3 次重试）
+     * 生成定制破冰问候语
      */
     suspend fun generateGreeting(
         rawJob: ScrapedRawJob,
@@ -226,6 +221,71 @@ class DeepSeekClient(
     }
 
     /**
+     * 生成多轮深入对话答复与熔断决策
+     */
+    suspend fun generateDialogueReply(
+        session: UnreadChatSession,
+        chatHistory: List<ChatMessageEntity>
+    ): Result<DialogueReplyResponse> {
+        val config = try { configRepository.getLlmConfig().validated() } catch (e: IllegalArgumentException) {
+            return Result.failure(e)
+        }
+        if (tokenUsageTracker.isBudgetExceeded()) {
+            return Result.failure(IllegalStateException("今日大模型预算超标，已暂停消息自动回复"))
+        }
+
+        val request = promptManager.buildDialogueRequest(session, chatHistory, model = config.model).copy(stream = false)
+        val startTime = System.currentTimeMillis()
+
+        val networkResult = apiResult {
+            transport.generate(config, request.messages.first().content, request.messages.last().content, request.temperature)
+        }
+
+        val duration = System.currentTimeMillis() - startTime
+
+        return networkResult.fold(
+            onSuccess = { response ->
+                val rawJson = response.text
+                val promptTokens = response.inputTokens
+                val completionTokens = response.outputTokens
+                val totalTokens = response.totalTokens
+
+                try {
+                    val dialogueResp = LlmOutputParser.dialogue(rawJson)
+
+                    tokenUsageTracker.recordTokens(promptTokens, completionTokens)
+                    jobRepository.recordLLMAudit(
+                        scene = "CHAT_DIALOGUE",
+                        jobId = session.resolveJobId(),
+                        modelName = request.model,
+                        prompt = request.messages.lastOrNull()?.content ?: "",
+                        response = rawJson,
+                        promptTokens = promptTokens,
+                        completionTokens = completionTokens,
+                        totalTokens = totalTokens,
+                        durationMs = duration,
+                        isSuccess = true
+                    )
+
+                    Log.i(tag, "✅ 智能答复生成成功 | 决策: ${dialogueResp.decision} | 原因: ${dialogueResp.reason}")
+                    Result.success(dialogueResp)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (e: Exception) {
+                    val parseErr = "对话回复结果处理失败"
+                    Log.e(tag, parseErr)
+                    recordFailedAudit(session.resolveJobId(), request, rawJson, duration, parseErr)
+                    Result.failure(e)
+                }
+            },
+            onFailure = { error ->
+                recordFailedAudit(session.resolveJobId(), request, "", duration, error.message ?: "网络异常")
+                Result.failure(error)
+            }
+        )
+    }
+
+    /**
      * 设置页面连通性测试
      */
     suspend fun testConnection(config: LlmConfig): Result<Boolean> = apiResult {
@@ -258,5 +318,4 @@ class DeepSeekClient(
             errorMessage = error
         )
     }
-
 }
