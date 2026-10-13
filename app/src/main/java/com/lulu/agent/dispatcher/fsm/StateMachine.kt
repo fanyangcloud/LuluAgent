@@ -29,20 +29,26 @@ class StateMachine(initialState: EngineState = EngineState.IDLE) {
                 return target == EngineState.IDLE
             }
 
-            // 规则 3：处于 PAUSED 时，只能恢复到工作态或归位 IDLE / 触发 EMERGENCY_STOP
+            // 规则 3：处于 PAUSED 时，可恢复到巡检、扫描或重置
             if (currentState == EngineState.PAUSED) {
-                return target == EngineState.SCANNING || target == EngineState.IDLE
+                return target == EngineState.CHECKING_INBOX || target == EngineState.SCANNING || target == EngineState.IDLE
             }
 
-            // 规则 4：通用状态流转白名单 (优化防御性流转)
+            // 规则 4：通用状态流转白名单 (支持双循环交替调度)
             return when (currentState) {
-                EngineState.IDLE -> target == EngineState.SCANNING
-                EngineState.SCANNING -> target == EngineState.INSPECTING || target == EngineState.PAUSED || target == EngineState.IDLE
-                EngineState.INSPECTING -> target == EngineState.THINKING || target == EngineState.SCANNING || target == EngineState.PAUSED
-                // 🌟 容错：允许评估后直接进入下一个卡片的提取，或重置
-                EngineState.THINKING -> target == EngineState.COMMUNICATING || target == EngineState.INSPECTING || target == EngineState.SCANNING || target == EngineState.PAUSED
-                // 🌟 容错：沟通完成后，既允许回 SCANNING，也允许极端情况下直接处理下一个卡片的 INSPECTING
-                EngineState.COMMUNICATING -> target == EngineState.SCANNING || target == EngineState.INSPECTING || target == EngineState.PAUSED || target == EngineState.IDLE
+                EngineState.IDLE -> target == EngineState.CHECKING_INBOX || target == EngineState.SCANNING
+
+                // 消息处理环
+                EngineState.CHECKING_INBOX -> target == EngineState.REPLYING_CHAT || target == EngineState.SCANNING || target == EngineState.THINKING || target == EngineState.PAUSED || target == EngineState.IDLE
+                EngineState.REPLYING_CHAT -> target == EngineState.CHECKING_INBOX || target == EngineState.SCANNING || target == EngineState.THINKING || target == EngineState.PAUSED || target == EngineState.IDLE
+
+                // 推荐探索环
+                EngineState.SCANNING -> target == EngineState.INSPECTING || target == EngineState.CHECKING_INBOX || target == EngineState.PAUSED || target == EngineState.IDLE
+                EngineState.INSPECTING -> target == EngineState.THINKING || target == EngineState.SCANNING || target == EngineState.CHECKING_INBOX || target == EngineState.PAUSED
+                EngineState.THINKING -> target == EngineState.COMMUNICATING || target == EngineState.REPLYING_CHAT || target == EngineState.INSPECTING || target == EngineState.SCANNING || target == EngineState.CHECKING_INBOX || target == EngineState.PAUSED
+                EngineState.COMMUNICATING -> target == EngineState.SCANNING || target == EngineState.CHECKING_INBOX || target == EngineState.INSPECTING || target == EngineState.PAUSED || target == EngineState.IDLE
+
+                // 🌟 增加 else 兜底分支，解决 Kotlin 编译器穷尽性检查报错
                 else -> false
             }
         }
@@ -62,7 +68,6 @@ class StateMachine(initialState: EngineState = EngineState.IDLE) {
             currentState = target
             Log.i(tag, "状态流转成功: $oldState -> $target (原因: $reason)")
 
-            // 触发所有监听器
             val callbacks = ArrayList(listeners)
             callbacks.forEach { it.invoke(oldState, target, reason) }
             return true
