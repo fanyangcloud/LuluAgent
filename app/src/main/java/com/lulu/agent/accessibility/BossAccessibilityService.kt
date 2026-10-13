@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -21,7 +20,7 @@ import com.lulu.agent.accessibility.task.TaskCallback
 import com.lulu.agent.dispatcher.contract.DispatcherBroadcasts
 
 /**
- * Boss直聘专属无障碍核心感知与执行服务
+ * Boss直聘专属无障碍核心感知与执行服务 (支持双流场景研判版)
  */
 class BossAccessibilityService : AccessibilityService(), TaskCallback {
 
@@ -41,7 +40,6 @@ class BossAccessibilityService : AccessibilityService(), TaskCallback {
 
         fun isConnected(): Boolean = instance != null
 
-        // 目标监控应用包名
         private const val TARGET_PACKAGE = "com.hpbr.bosszhipin"
 
         // 关键页面特征 ID
@@ -49,6 +47,11 @@ class BossAccessibilityService : AccessibilityService(), TaskCallback {
         private const val ID_DETAIL_CHAT_BTN = "com.hpbr.bosszhipin:id/btn_chat"
         private const val ID_DETAIL_JOB_NAME = "com.hpbr.bosszhipin:id/tv_job_name"
         private const val ID_CHAT_EDIT_TEXT = "com.hpbr.bosszhipin:id/editText_with_scrollbar"
+
+        // 消息列表专属特征 ID
+        private const val ID_TAB_3_TEXT = "com.hpbr.bosszhipin:id/tv_tab_3"
+        private const val ID_CONTACT_VP = "com.hpbr.bosszhipin:id/contact_vp"
+        private const val ID_CONTACT_RECYCLER = "com.hpbr.bosszhipin:id/recyclerView"
     }
 
     override fun onServiceConnected() {
@@ -73,16 +76,12 @@ class BossAccessibilityService : AccessibilityService(), TaskCallback {
         currentRunningTask = null
     }
 
-    // ==================== 页面场景快速研判与广播 ====================
-
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
-        // 仅在主应用处于前台时进行场景分析
         val pkgName = event.packageName?.toString() ?: return
         if (pkgName != TARGET_PACKAGE) return
 
-        // 限制研判频率：最小间隔 300ms，防止窗口内容变化事件（ContentChanged）造成卡顿
         val now = System.currentTimeMillis()
         if (now - lastSceneCheckTimestamp < 300L) return
         lastSceneCheckTimestamp = now
@@ -91,13 +90,11 @@ class BossAccessibilityService : AccessibilityService(), TaskCallback {
         val currentScene = detectCurrentScene(root)
         root.recycle()
 
-        // 场景发生迁移时发送通知
         if (currentScene != lastKnownScene && currentScene != PageScene.UNKNOWN) {
             Log.d(tag, "视觉场景迁移: $lastKnownScene -> $currentScene")
             lastKnownScene = currentScene
             broadcastSceneChange(currentScene)
 
-            // 如果侦测到验证码/人脸识别，第一时间发出风险警报广播
             if (currentScene.isRisk) {
                 Log.e(tag, "🚨 检测到风控验证场景，广播警报！")
                 broadcastRiskTriggered("CAPTCHA_INTERCEPT", "检测到滑动验证码或安全验证弹窗")
@@ -125,7 +122,17 @@ class BossAccessibilityService : AccessibilityService(), TaskCallback {
             return PageScene.JOB_DETAIL
         }
 
-        // 4. 判定职位列表信息流
+        // 4. 判定消息列表会话流 (核心更新：检测底部 Tab 3 选中态，或联系人专属 ViewPager)
+        val tab3Nodes = root.findAccessibilityNodeInfosByViewId(ID_TAB_3_TEXT)
+        val isTab3Selected = tab3Nodes?.firstOrNull()?.isSelected == true
+        tab3Nodes?.forEach { it.recycle() }
+
+        val hasContactVp = hasNodeById(root, ID_CONTACT_VP)
+        if (isTab3Selected || hasContactVp) {
+            return PageScene.MESSAGE_LIST
+        }
+
+        // 5. 判定职位列表推荐流
         if (hasNodeById(root, ID_FEED_LIST)) {
             return PageScene.RECOMMEND_LIST
         }
@@ -202,8 +209,6 @@ class BossAccessibilityService : AccessibilityService(), TaskCallback {
         sendBroadcast(intent)
     }
 
-    // ==================== 广播指令监听器 ====================
-
     private val commandReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: return
@@ -224,12 +229,8 @@ class BossAccessibilityService : AccessibilityService(), TaskCallback {
 
     private fun dispatchTaskByName(taskName: String, intent: Intent) {
         when (taskName) {
-            "ScrollFeedTask" -> {
-                executeTask(ScrollFeedTask())
-            }
-            "InspectDetailTask" -> {
-                executeTask(InspectDetailTask())
-            }
+            "ScrollFeedTask" -> executeTask(ScrollFeedTask())
+            "InspectDetailTask" -> executeTask(InspectDetailTask())
             "SendGreetingTask" -> {
                 val greeting = intent.getStringExtra(DispatcherBroadcasts.EXTRA_GREETING_TEXT) ?: "您好！"
                 executeTask(SendGreetingTask(greetingText = greeting))
