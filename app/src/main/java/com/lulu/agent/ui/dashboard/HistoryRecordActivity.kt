@@ -34,18 +34,17 @@ class HistoryRecordActivity : AppCompatActivity() {
     private val records = mutableListOf<JobEntity>()
     private val adapter = HistoryAdapter(records)
 
-    // 🌟 鹿鹿治愈系规范色盘
     private val colorBg = Color.parseColor("#F8F9FB")
     private val colorCard = Color.WHITE
     private val colorCardStroke = Color.parseColor("#F0F2F5")
-    private val colorPrimary = Color.parseColor("#FA6542")      // 暖杏橙
-    private val colorTextMain = Color.parseColor("#1F2329")     // 高阶石板黑
-    private val colorTextSub = Color.parseColor("#8F959E")      // 优雅次级灰
-    private val colorThoughtBg = Color.parseColor("#F4F6F9")    // 评语气泡底色
+    private val colorPrimary = Color.parseColor("#FA6542")
+    private val colorTextMain = Color.parseColor("#1F2329")
+    private val colorTextSub = Color.parseColor("#8F959E")
+    private val colorThoughtBg = Color.parseColor("#F4F6F9")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        supportActionBar?.hide() // 隐藏安卓原生 ActionBar
+        supportActionBar?.hide()
         setContentView(buildContentView())
         loadData()
     }
@@ -59,7 +58,6 @@ class HistoryRecordActivity : AppCompatActivity() {
             )
         }
 
-        // 1. 顶部自定义温润标题栏
         val topBar = createTopBar().apply { id = View.generateViewId() }
         val topBarParams = RelativeLayout.LayoutParams(
             RelativeLayout.LayoutParams.MATCH_PARENT,
@@ -67,7 +65,6 @@ class HistoryRecordActivity : AppCompatActivity() {
         ).apply { addRule(RelativeLayout.ALIGN_PARENT_TOP) }
         root.addView(topBar, topBarParams)
 
-        // 2. 列表流容器
         val listContainer = FrameLayout(this).apply {
             val p = dp2px(4)
             setPadding(0, p, 0, dp2px(12))
@@ -111,18 +108,13 @@ class HistoryRecordActivity : AppCompatActivity() {
         return root
     }
 
-    /**
-     * 顶部标题栏：紧凑紧贴状态栏，消除冗余留白
-     */
     private fun createTopBar(): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            // 🌟 微调核心 1：将 topPadding 从 42dp 调整为 12dp，紧凑贴合状态栏
             setPadding(dp2px(16), dp2px(12), dp2px(20), dp2px(10))
             setBackgroundColor(colorBg)
 
-            // 返回圆钮
             val backBtn = TextView(this@HistoryRecordActivity).apply {
                 text = "‹"
                 textSize = 28f
@@ -182,8 +174,6 @@ class HistoryRecordActivity : AppCompatActivity() {
         }
     }
 
-    // ==================== 极简高质感 手账风 Adapter ====================
-
     inner class HistoryAdapter(private val dataList: List<JobEntity>) :
         RecyclerView.Adapter<HistoryAdapter.ViewHolder>() {
 
@@ -216,7 +206,6 @@ class HistoryRecordActivity : AppCompatActivity() {
                 }
             }
 
-            // 第一行：岗位名称 + 薪资
             val row1 = LinearLayout(parent.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -233,14 +222,13 @@ class HistoryRecordActivity : AppCompatActivity() {
                 tag = "salary"
                 textSize = 15f
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(colorPrimary) // 鹿鹿专属暖杏橙
+                setTextColor(colorPrimary)
                 includeFontPadding = false
             }
             row1.addView(title)
             row1.addView(salary)
             card.addView(row1)
 
-            // 第二行：公司全称与地点 + 软圆角状态标签
             val row2 = LinearLayout(parent.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -269,7 +257,6 @@ class HistoryRecordActivity : AppCompatActivity() {
             row2.addView(status)
             card.addView(row2)
 
-            // 第三行：鹿鹿参谋气泡 (小手账核心)
             val bubble = LinearLayout(parent.context).apply {
                 orientation = LinearLayout.VERTICAL
                 background = GradientDrawable().apply {
@@ -295,7 +282,6 @@ class HistoryRecordActivity : AppCompatActivity() {
             bubble.addView(reason)
             card.addView(bubble)
 
-            // 第四行：时间 + 契合度徽章
             val row4 = LinearLayout(parent.context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -330,51 +316,70 @@ class HistoryRecordActivity : AppCompatActivity() {
             holder.titleTv.text = item.title
             holder.salaryTv.text = item.salaryText
 
-            // 公司名与城市格式化
             val compName = item.companyName.trim()
             val cityName = item.city.trim().ifBlank { "全国" }
             holder.companyTv.text = if (compName.isNotEmpty()) "$compName · $cityName" else cityName
 
-            // 🌟 微调核心 2：强化“跳过”标签的辨识度（清晰醒目，一目了然）
-            when (item.status) {
-                JobEntity.STATUS_DELIVERED -> {
-                    holder.statusChip.text = "已投递 ✨"
-                    holder.statusChip.setTextColor(Color.parseColor("#2BA471"))
-                    holder.statusChip.background = getPillDrawable("#EBF6F1")
-                }
-                JobEntity.STATUS_COMMUNICATED -> {
-                    holder.statusChip.text = "已打招呼 💬"
-                    holder.statusChip.setTextColor(Color.parseColor("#FA6542"))
-                    holder.statusChip.background = getPillDrawable("#FFF4F0")
-                }
-                JobEntity.STATUS_EVALUATED -> {
-                    holder.statusChip.text = "契合度高 🎯"
-                    holder.statusChip.setTextColor(Color.parseColor("#2E7BE6"))
-                    holder.statusChip.background = getPillDrawable("#EDF4FE")
-                }
-                // 明显标识：柔和温红底 + 醒目警戒红字，彻底告别浅灰色
-                JobEntity.STATUS_REJECTED -> {
-                    holder.statusChip.text = "已跳过"
-                    holder.statusChip.setTextColor(Color.parseColor("#E05244"))
-                    holder.statusChip.background = getPillDrawable("#FEECE8")
-                }
-                JobEntity.STATUS_FILTERED_OUT -> {
-                    holder.statusChip.text = "规则过滤"
-                    holder.statusChip.setTextColor(Color.parseColor("#E05244"))
-                    holder.statusChip.background = getPillDrawable("#FEECE8")
-                }
-                else -> {
-                    holder.statusChip.text = item.status
-                    holder.statusChip.setTextColor(Color.parseColor("#8F959E"))
-                    holder.statusChip.background = getPillDrawable("#F0F2F5")
+            // 🌟 核心状态标签渲染（支持熔断与深入沟通）
+            if (item.isChatClosed) {
+                holder.statusChip.text = "已熔断回绝 ⛔"
+                holder.statusChip.setTextColor(Color.parseColor("#E05244"))
+                holder.statusChip.background = getPillDrawable("#FEECE8")
+                val reason = item.evalReason.ifBlank { "触发求职底线熔断" }
+                holder.reasonTv.text = "🚨 鹿鹿熔断：$reason"
+            } else {
+                when (item.status) {
+                    JobEntity.STATUS_CHATTING -> {
+                        holder.statusChip.text = "深入沟通中 💬"
+                        holder.statusChip.setTextColor(Color.parseColor("#009688"))
+                        holder.statusChip.background = getPillDrawable("#E0F2F1")
+                        val cleanReason = item.evalReason.ifBlank { "正在与招聘方多轮交流中..." }
+                        holder.reasonTv.text = "🦌 鹿鹿跟进：$cleanReason"
+                    }
+                    JobEntity.STATUS_DELIVERED -> {
+                        holder.statusChip.text = "已投递 ✨"
+                        holder.statusChip.setTextColor(Color.parseColor("#2BA471"))
+                        holder.statusChip.background = getPillDrawable("#EBF6F1")
+                        val cleanReason = item.evalReason.ifBlank { "已完成破冰打招呼与简历投递" }
+                        holder.reasonTv.text = "🦌 鹿鹿评语：$cleanReason"
+                    }
+                    JobEntity.STATUS_COMMUNICATED -> {
+                        holder.statusChip.text = "已打招呼 💬"
+                        holder.statusChip.setTextColor(Color.parseColor("#FA6542"))
+                        holder.statusChip.background = getPillDrawable("#FFF4F0")
+                        val cleanReason = item.evalReason.ifBlank { "已成功发起破冰问候" }
+                        holder.reasonTv.text = "🦌 鹿鹿评语：$cleanReason"
+                    }
+                    JobEntity.STATUS_EVALUATED -> {
+                        holder.statusChip.text = "契合度高 🎯"
+                        holder.statusChip.setTextColor(Color.parseColor("#2E7BE6"))
+                        holder.statusChip.background = getPillDrawable("#EDF4FE")
+                        val cleanReason = item.evalReason.ifBlank { "模型研判契合度高" }
+                        holder.reasonTv.text = "🦌 鹿鹿评语：$cleanReason"
+                    }
+                    JobEntity.STATUS_REJECTED -> {
+                        holder.statusChip.text = "已跳过"
+                        holder.statusChip.setTextColor(Color.parseColor("#E05244"))
+                        holder.statusChip.background = getPillDrawable("#FEECE8")
+                        val cleanReason = item.evalReason.ifBlank { "岗位评估未达标" }
+                        holder.reasonTv.text = "🦌 鹿鹿评语：$cleanReason"
+                    }
+                    JobEntity.STATUS_FILTERED_OUT -> {
+                        holder.statusChip.text = "规则过滤"
+                        holder.statusChip.setTextColor(Color.parseColor("#E05244"))
+                        holder.statusChip.background = getPillDrawable("#FEECE8")
+                        val cleanReason = item.evalReason.ifBlank { "命中本地过滤规则" }
+                        holder.reasonTv.text = "🦌 鹿鹿评语：$cleanReason"
+                    }
+                    else -> {
+                        holder.statusChip.text = item.status
+                        holder.statusChip.setTextColor(Color.parseColor("#8F959E"))
+                        holder.statusChip.background = getPillDrawable("#F0F2F5")
+                        holder.reasonTv.text = "🦌 鹿鹿评语：${item.evalReason.ifBlank { "正在分析岗位..." }}"
+                    }
                 }
             }
 
-            // 评语增加鹿鹿前缀
-            val cleanReason = item.evalReason.ifBlank { "正在分析岗位的契合度与潜在风险..." }
-            holder.reasonTv.text = "🦌 鹿鹿评语：$cleanReason"
-
-            // 契合度得分胶囊
             if (item.matchScore >= 70) {
                 holder.scoreTv.text = "契合度: ${item.matchScore}分"
                 holder.scoreTv.setTextColor(Color.parseColor("#2BA471"))

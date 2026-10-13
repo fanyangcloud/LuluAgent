@@ -39,6 +39,12 @@ interface ChatMessageDao {
     suspend fun getMessageCount(jobId: String): Int
 
     /**
+     * 统计指定时间范围内自己（求职者/Agent）发出的回复消息条数
+     */
+    @Query("SELECT COUNT(1) FROM chat_messages WHERE sender_role = 'ME' AND timestamp >= :startTime AND timestamp <= :endTime")
+    suspend fun getRepliedCountBetween(startTime: Long, endTime: Long): Int
+
+    /**
      * 将某岗位的所有消息标记为已消费
      */
     @Query("UPDATE chat_messages SET is_processed = 1 WHERE job_id = :jobId")

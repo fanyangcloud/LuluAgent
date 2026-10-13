@@ -25,33 +25,27 @@ interface JobDao {
     @Query("SELECT EXISTS(SELECT 1 FROM jobs WHERE job_id = :jobId)")
     suspend fun isJobExists(jobId: String): Boolean
 
-    /**
-     * 判定岗位是否已经发起过沟通或正在深度对话，防止重复打招呼
-     */
     @Query("SELECT EXISTS(SELECT 1 FROM jobs WHERE job_id = :jobId AND status IN ('COMMUNICATED', 'DELIVERED', 'CHATTING'))")
     suspend fun isJobCommunicated(jobId: String): Boolean
 
-    /**
-     * 校验会话是否已被熔断关闭
-     */
     @Query("SELECT is_chat_closed FROM jobs WHERE job_id = :jobId LIMIT 1")
     suspend fun isChatClosed(jobId: String): Boolean?
 
-    /**
-     * 沟通总量统计兼顾 COMMUNICATED, DELIVERED, CHATTING
-     */
     @Query("SELECT COUNT(1) FROM jobs WHERE status IN ('COMMUNICATED', 'DELIVERED', 'CHATTING') AND updated_at >= :startTime AND updated_at <= :endTime")
     suspend fun getCommunicatedCountBetween(startTime: Long, endTime: Long): Int
 
     @Query("SELECT COUNT(1) FROM jobs WHERE status IN ('DELIVERED', 'RESUME_SENT') AND updated_at >= :startTime AND updated_at <= :endTime")
     suspend fun getDeliveredCountBetween(startTime: Long, endTime: Long): Int
 
+    /**
+     * 统计指定时间范围内触发熔断关闭的岗位数量
+     */
+    @Query("SELECT COUNT(1) FROM jobs WHERE is_chat_closed = 1 AND updated_at >= :startTime AND updated_at <= :endTime")
+    suspend fun getCircuitBrokenCountBetween(startTime: Long, endTime: Long): Int
+
     @Query("UPDATE jobs SET status = :status, updated_at = :updatedAt WHERE job_id = :jobId")
     suspend fun updateStatus(jobId: String, status: String, updatedAt: Long = System.currentTimeMillis())
 
-    /**
-     * 触发熔断：标记会话为关闭、状态更新为 REJECTED 并记录熔断原因
-     */
     @Query("""
         UPDATE jobs 
         SET is_chat_closed = 1, 
@@ -66,9 +60,6 @@ interface JobDao {
         updatedAt: Long = System.currentTimeMillis()
     )
 
-    /**
-     * 更新对话活跃状态及时间戳
-     */
     @Query("""
         UPDATE jobs 
         SET status = :status, 

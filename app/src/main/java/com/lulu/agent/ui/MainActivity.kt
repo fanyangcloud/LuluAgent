@@ -15,7 +15,6 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.ScrollView
@@ -51,21 +50,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var percentageTv: TextView
     private lateinit var mainActionButton: TextView
 
-    // 数据看板四个计数器
-    private lateinit var interviewCountTv: TextView
-    private lateinit var chatCountTv: TextView
-    private lateinit var deliveryCountTv: TextView
-    private lateinit var contactCountTv: TextView
+    // 数据看板四个计数器 (全面升级为双循环 4 大核心战报)
+    private lateinit var chatCountTv: TextView       // 今日主动沟通
+    private lateinit var replyCountTv: TextView      // 智能答复条数
+    private lateinit var deliveryCountTv: TextView   // 今日成功投递
+    private lateinit var brokenCountTv: TextView     // 熔断拦截岗位
 
-    // 🌟 纯净视觉色盘：低饱和温润暖杏橙 + 极简淡雅灰
+    // 纯净视觉色盘
     private val colorBg = Color.parseColor("#F8F9FB")
     private val colorCard = Color.WHITE
     private val colorCardStroke = Color.parseColor("#F0F2F5")
-    private val colorPrimary = Color.parseColor("#FA6542")       // 鹿鹿治愈暖杏色
-    private val colorPrimarySoft = Color.parseColor("#FFF4F0")   // 极淡微桃粉
-    private val colorTextMain = Color.parseColor("#1F2329")      // 高阶石板黑
-    private val colorTextSub = Color.parseColor("#8F959E")       // 优雅次级灰
-    private val colorSuccess = Color.parseColor("#2BA471")       // 清新薄荷绿
+    private val colorPrimary = Color.parseColor("#FA6542")
+    private val colorPrimarySoft = Color.parseColor("#FFF4F0")
+    private val colorTextMain = Color.parseColor("#1F2329")
+    private val colorTextSub = Color.parseColor("#8F959E")
+    private val colorSuccess = Color.parseColor("#2BA471")
     private val colorSuccessSoft = Color.parseColor("#EBF6F1")
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,8 +84,6 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(statusReceiver)
     }
 
-    // ==================== 极简纯净纯代码布局 ====================
-
     private fun buildContentView(): View {
         val root = RelativeLayout(this).apply {
             setBackgroundColor(colorBg)
@@ -96,7 +93,6 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        // 1. 顶部标题栏
         val topBar = createTopBar().apply { id = View.generateViewId() }
         val topBarParams = RelativeLayout.LayoutParams(
             RelativeLayout.LayoutParams.MATCH_PARENT,
@@ -104,7 +100,6 @@ class MainActivity : AppCompatActivity() {
         ).apply { addRule(RelativeLayout.ALIGN_PARENT_TOP) }
         root.addView(topBar, topBarParams)
 
-        // 2. 底部轻量导航栏
         val bottomNav = createBottomNav().apply { id = View.generateViewId() }
         val bottomNavParams = RelativeLayout.LayoutParams(
             RelativeLayout.LayoutParams.MATCH_PARENT,
@@ -112,7 +107,6 @@ class MainActivity : AppCompatActivity() {
         ).apply { addRule(RelativeLayout.ALIGN_PARENT_BOTTOM) }
         root.addView(bottomNav, bottomNavParams)
 
-        // 3. 中间可滚动卡片区
         val scrollView = ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -131,7 +125,6 @@ class MainActivity : AppCompatActivity() {
             setPadding(pad, dp2px(6), pad, dp2px(24))
         }
 
-        // 核心板块装配
         contentLayout.addView(createPreparednessCard())
         contentLayout.addView(createRunningStatusCard())
         contentLayout.addView(createDataDashboardCard())
@@ -142,9 +135,6 @@ class MainActivity : AppCompatActivity() {
         return root
     }
 
-    /**
-     * 顶部标题栏：温润大标题与治愈问候
-     */
     private fun createTopBar(): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -165,7 +155,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             val subtitle = TextView(this@MainActivity).apply {
-                text = "深呼吸，今天也会遇到懂你的好伯乐"
+                text = "全双工协同：先答复来信，再主动探路"
                 textSize = 12f
                 setTextColor(colorTextSub)
                 includeFontPadding = false
@@ -178,7 +168,6 @@ class MainActivity : AppCompatActivity() {
             titleCol.addView(title)
             titleCol.addView(subtitle)
 
-            // 右上角小齿轮
             val gearBtn = TextView(this@MainActivity).apply {
                 text = "⚙️"
                 textSize = 18f
@@ -199,9 +188,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 【重构核心】：小鹿准备清单（将原先占地巨大的双卡片合为清爽的列表）
-     */
     private fun createPreparednessCard(): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -213,7 +199,6 @@ class MainActivity : AppCompatActivity() {
             ).apply { topMargin = dp2px(10) }
         }
 
-        // 小标题
         val headerTv = TextView(this).apply {
             text = "小鹿的出发准备"
             textSize = 13f
@@ -223,16 +208,14 @@ class MainActivity : AppCompatActivity() {
         }
         card.addView(headerTv)
 
-        // 1. 无障碍权限行
         val (row1, btn1) = createPermRow(
             icon = "🐾",
             title = "敲门开路",
-            desc = "用于在 Boss 推荐流替你探寻新岗位",
+            desc = "用于在 Boss 列表巡检与模拟手势",
             onAction = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         )
         accessibilityBtn = btn1
 
-        // 浅浅的分割线
         val divider = View(this).apply {
             setBackgroundColor(colorCardStroke)
             layoutParams = LinearLayout.LayoutParams(
@@ -244,11 +227,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 2. 悬浮窗权限行
         val (row2, btn2) = createPermRow(
             icon = "💭",
             title = "悄悄支招",
-            desc = "聊天时让小鹿在旁边温柔辅助",
+            desc = "悬浮窗深度驾驶舱与运行状态看板",
             onAction = {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     startActivity(
@@ -345,9 +327,6 @@ class MainActivity : AppCompatActivity() {
         return Pair(row, actionBtn)
     }
 
-    /**
-     * 运行状态与行动控制卡片 (极简干净、大圆角呼吸感)
-     */
     private fun createRunningStatusCard(): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -359,7 +338,6 @@ class MainActivity : AppCompatActivity() {
             ).apply { topMargin = dp2px(14) }
         }
 
-        // 上方状态小胶囊与进度
         val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -437,9 +415,8 @@ class MainActivity : AppCompatActivity() {
         topRow.addView(progressContainer)
         card.addView(topRow)
 
-        // 下半段：温润圆角行动主按钮
         mainActionButton = TextView(this).apply {
-            text = "🦌 启动鹿鹿 · 开始探路"
+            text = "🦌 启动鹿鹿 · 开始工作"
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
@@ -464,7 +441,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 四列数据看板 (去掉了大色块 Emoji 干扰，以清爽的现代排印聚焦数据)
+     * 四列核心数据看板 (升级为双循环战报)
      */
     private fun createDataDashboardCard(): View {
         val card = LinearLayout(this).apply {
@@ -498,15 +475,16 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        val (c1, tv1) = createDataColumn("已约面试", "0")
-        val (c2, tv2) = createDataColumn("今日沟通", "0")
+        // 🌟 核心指标改造：今日沟通、智能答复、今日投递、熔断拦截
+        val (c1, tv1) = createDataColumn("今日沟通", "0")
+        val (c2, tv2) = createDataColumn("智能答复", "0")
         val (c3, tv3) = createDataColumn("今日投递", "0")
-        val (c4, tv4) = createDataColumn("联系交换", "0")
+        val (c4, tv4) = createDataColumn("熔断拦截", "0")
 
-        interviewCountTv = tv1
-        chatCountTv = tv2
+        chatCountTv = tv1
+        replyCountTv = tv2
         deliveryCountTv = tv3
-        contactCountTv = tv4
+        brokenCountTv = tv4
 
         row.addView(c1)
         row.addView(c2)
@@ -557,15 +535,11 @@ class MainActivity : AppCompatActivity() {
         return Pair(col, countTv)
     }
 
-    /**
-     * 极简扁平底部导航栏
-     */
     private fun createBottomNav(): View {
         val nav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(Color.WHITE)
-            // 极细微的顶边线
             background = GradientDrawable().apply {
                 setColor(Color.WHITE)
                 setStroke(dp2px(1), colorCardStroke)
@@ -610,8 +584,6 @@ class MainActivity : AppCompatActivity() {
             addView(labelTv)
         }
     }
-
-    // ==================== 业务逻辑与状态驱动 ====================
 
     private fun refreshAllStatus() {
         val isAccessibilityOk = BossAccessibilityService.isConnected()
@@ -669,7 +641,7 @@ class MainActivity : AppCompatActivity() {
                 setColor(Color.parseColor("#F57C00"))
             }
         } else {
-            mainActionButton.text = "🦌 启动鹿鹿 · 开始探路"
+            mainActionButton.text = "🦌 启动鹿鹿 · 开始工作"
             mainActionButton.background = GradientDrawable().apply {
                 cornerRadius = dp2px(14).toFloat()
                 setColor(colorPrimary)
@@ -677,25 +649,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 实时统计 4 大战报指标
+     */
     private fun loadDashboardData(app: LuluApp) {
         lifecycleScope.launch {
-            val (todayChat, todayApplied) = withContext(Dispatchers.IO) {
+            val (todayChat, todayReplied, todayApplied, todayBroken) = withContext(Dispatchers.IO) {
                 val db = app.database
                 val cal = Calendar.getInstance().apply {
                     set(Calendar.HOUR_OF_DAY, 0)
                     set(Calendar.MINUTE, 0)
                     set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
                 }
                 val start = cal.timeInMillis
                 val end = System.currentTimeMillis()
 
                 val chats = db.jobDao().getCommunicatedCountBetween(start, end)
+                val replied = db.chatMessageDao().getRepliedCountBetween(start, end)
                 val applied = db.jobDao().getDeliveredCountBetween(start, end)
-                Pair(chats, applied)
+                val broken = db.jobDao().getCircuitBrokenCountBetween(start, end)
+
+                listOf(chats, replied, applied, broken)
             }
 
             chatCountTv.text = todayChat.toString()
+            replyCountTv.text = todayReplied.toString()
             deliveryCountTv.text = todayApplied.toString()
+            brokenCountTv.text = todayBroken.toString()
 
             val maxCount = app.configRepository.getMaxDailyGreetings()
             val percent = if (maxCount > 0) minOf(100, (todayChat * 100) / maxCount) else 0
@@ -715,7 +696,7 @@ class MainActivity : AppCompatActivity() {
 
         if (currentState == EngineState.PAUSED) {
             app.taskDispatcher.resume()
-            updateEngineStateUi(EngineState.SCANNING)
+            updateEngineStateUi(EngineState.CHECKING_INBOX)
             return
         }
 
@@ -753,9 +734,9 @@ class MainActivity : AppCompatActivity() {
 
         FloatingHUDService.startService(this)
         app.taskDispatcher.start(warmUpDelayMs = 4000L)
-        updateEngineStateUi(EngineState.SCANNING)
+        updateEngineStateUi(EngineState.CHECKING_INBOX)
 
-        Toast.makeText(this, "🚀 鹿鹿已启航，正在跳转 Boss 直聘...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "🚀 鹿鹿已启航，优先巡检回复消息...", Toast.LENGTH_SHORT).show()
     }
 
     private fun showSettingsDialog() {

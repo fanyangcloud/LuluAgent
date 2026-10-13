@@ -62,7 +62,6 @@ class FloatingHUDService : Service() {
         setupGestureBridge()
         registerStatusReceiver()
 
-        // 默认启动小胶囊
         windowStateManager.switchToCapsule()
         renderAll()
     }
@@ -76,8 +75,6 @@ class FloatingHUDService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
-    // ==================== 视图交互与广播转发 ====================
 
     private fun setupViewListeners() {
         capsuleView.onExpandClicked = {
@@ -118,8 +115,6 @@ class FloatingHUDService : Service() {
         consoleView.render(currentState)
     }
 
-    // ==================== 状态同步广播监听 ====================
-
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: return
@@ -129,15 +124,24 @@ class FloatingHUDService : Service() {
                     val newStateName = intent.getStringExtra(DispatcherBroadcasts.EXTRA_NEW_STATE) ?: return
                     try {
                         val state = EngineState.valueOf(newStateName)
-                        currentState = currentState.copy(
+                        var updated = currentState.copy(
                             stateTitle = state.title,
                             indicatorColorHex = state.indicatorColorHex,
                             isOperating = state.isOperating(),
                             isPaused = state == EngineState.PAUSED
                         )
+
+                        // 状态专属提示文案映射
+                        when (state) {
+                            EngineState.CHECKING_INBOX -> updated = updated.copy(currentTargetJob = "正在巡检未读消息信箱...")
+                            EngineState.REPLYING_CHAT -> updated = updated.copy(currentTargetJob = "正在组织深入答复...")
+                            else -> Unit
+                        }
+
+                        currentState = updated
                         renderAll()
                     } catch (e: Exception) {
-                        // 忽略解析错误
+                        // 忽略解析异常
                     }
                 }
 
@@ -147,12 +151,22 @@ class FloatingHUDService : Service() {
                     val formatted = "[$source] $msg"
 
                     var updated = currentState.appendLog(formatted)
-                    if (msg.contains("模型") || msg.contains("评估") || msg.contains("构思")) {
+
+                    // 1. 推理与思考链提取
+                    if (msg.contains("模型") || msg.contains("评估") || msg.contains("构思") || msg.contains("推演")) {
                         updated = updated.copy(deepSeekThought = msg)
                     }
-                    if (msg.contains("成功向")) {
+
+                    // 2. 标的岗位与沟通目标提取
+                    if (msg.contains("成功向") || msg.contains("命中未读消息") || msg.contains("正在处理")) {
                         updated = updated.copy(currentTargetJob = msg)
                     }
+
+                    // 3. 熔断高亮提示
+                    if (msg.contains("熔断")) {
+                        updated = updated.copy(deepSeekThought = "🚨 $msg")
+                    }
+
                     currentState = updated
                     renderAll()
                 }
@@ -179,8 +193,6 @@ class FloatingHUDService : Service() {
         }
     }
 
-    // ==================== 前台通知保活 (Android 14+ FGS 适配) ====================
-
     private fun startForegroundNotification() {
         val channelName = "BossAgent 运行守护"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -190,13 +202,12 @@ class FloatingHUDService : Service() {
         }
 
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("BossAgent 正在后台守护运行")
-            .setContentText("双模智能悬浮控制台已就绪")
+            .setContentTitle("鹿鹿求职搭子正在运行")
+            .setContentText("全双工智能沟通与巡查中枢已就绪")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        // 核心修复：针对 Android 14+ (UPSIDE_DOWN_CAKE) 必须显式携带 FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID,
