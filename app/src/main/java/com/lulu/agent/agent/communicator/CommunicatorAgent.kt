@@ -58,18 +58,23 @@ class CommunicatorAgent(
             return
         }
 
-        sendAgentLog("✍️ 正在让模型结合技术契合点构思破冰语...")
-        val greetingResult = deepSeekClient.generateGreeting(rawJob, evaluatorResult.highlights)
+        val greetingText: String?
+        if (configRepository.isAutoGenerateGreeting()) {
+            sendAgentLog("✍️ 正在让模型结合技术契合点构思破冰语...")
+            val greetingResult = deepSeekClient.generateGreeting(rawJob, evaluatorResult.highlights)
 
-        val greetingText = greetingResult.fold(
-            onSuccess = { it.getCleanGreeting() },
-            onFailure = { err ->
-                Log.w(tag, "LLM话术生成降级: ${err.message}")
-                "您好！关注到贵团队正在招聘${title}，我在该领域有深入实战与架构经验，与岗位要求非常契合，希望能与您交流探讨！"
-            }
-        )
-
-        sendAgentLog("💬 敲定破冰语: $greetingText")
+            greetingText = greetingResult.fold(
+                onSuccess = { it.getCleanGreeting() },
+                onFailure = { err ->
+                    Log.w(tag, "LLM话术生成降级: ${err.message}")
+                    "您好！关注到贵团队正在招聘${title}，我在该领域有深入实战与架构经验，与岗位要求非常契合，希望能与您交流探讨！"
+                }
+            )
+            sendAgentLog("💬 敲定破冰语: $greetingText")
+        } else {
+            greetingText = null
+            sendAgentLog("⚡ 已关闭自动生成岗位回答，直接点击【立即沟通】...")
+        }
 
         val service = BossAccessibilityService.instance
         if (service == null) {
@@ -93,12 +98,17 @@ class CommunicatorAgent(
         if (isTaskSuccess) {
             jobRepository.markJobDelivered(jobId)
             // 记入初次破冰对话记录
-            jobRepository.recordChatMessage(jobId, ChatMessageEntity.ROLE_ME, greetingText)
+            jobRepository.recordChatMessage(
+                jobId,
+                ChatMessageEntity.ROLE_ME,
+                greetingText ?: "【直接点击立即沟通】"
+            )
             val todayTotal = jobRepository.getTodayCommunicatedCount()
-            sendAgentLog("🎉 成功向【$company - $title】打招呼！今日累计: $todayTotal 次", isHighlight = true)
+            val actionDesc = if (greetingText != null) "打招呼" else "立即沟通"
+            sendAgentLog("🎉 成功向【$company - $title】${actionDesc}！今日累计: $todayTotal 次", isHighlight = true)
             onSuccess()
         } else {
-            sendAgentLog("❌ 打招呼未送达")
+            sendAgentLog("❌ 沟通操作未完成")
             onFailed("SendGreetingTask 执行失败")
         }
     }

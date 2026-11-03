@@ -29,4 +29,10 @@ class ConfigRepository(
 
     fun isPaused(): Boolean = appSettings.isPaused()
     fun setPaused(paused: Boolean) = appSettings.setPaused(paused)
+
+    fun isFollowUpReplyEnabled(): Boolean = appSettings.isFollowUpReplyEnabled()
+    fun setFollowUpReplyEnabled(enabled: Boolean) = appSettings.setFollowUpReplyEnabled(enabled)
+
+    fun isAutoGenerateGreeting(): Boolean = appSettings.isAutoGenerateGreeting()
+    fun setAutoGenerateGreeting(enabled: Boolean) = appSettings.setAutoGenerateGreeting(enabled)
 }

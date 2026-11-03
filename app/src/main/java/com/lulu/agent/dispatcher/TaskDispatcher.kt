@@ -130,7 +130,12 @@ class TaskDispatcher(
         evaluatorAgent.start()
         communicatorAgent.start()
 
-        safeTransitionTo(EngineState.CHECKING_INBOX, "启动流水线")
+        val initialTargetState = if (configRepository.isFollowUpReplyEnabled()) {
+            EngineState.CHECKING_INBOX
+        } else {
+            EngineState.SCANNING
+        }
+        safeTransitionTo(initialTargetState, "启动流水线")
         configRepository.setPaused(false)
 
         orchestratorJob = dispatcherScope.launch {
@@ -139,7 +144,8 @@ class TaskDispatcher(
             if (warmUpDelayMs > 0) {
                 val totalSeconds = (warmUpDelayMs / 1000).toInt()
                 for (s in totalSeconds downTo 1) {
-                    broadcastStepLog("🚀 正在就绪 Boss 宿主环境，将在 ${s}s 后开启优先信箱巡查...")
+                    val targetDesc = if (configRepository.isFollowUpReplyEnabled()) "优先信箱巡查" else "推荐岗位巡查"
+                    broadcastStepLog("🚀 正在就绪 Boss 宿主环境，将在 ${s}s 后开启${targetDesc}...")
                     delay(1000L)
                 }
             }
@@ -170,7 +176,12 @@ class TaskDispatcher(
     }
 
     fun resume() {
-        if (stateMachine.transitionTo(EngineState.CHECKING_INBOX, "恢复执行")) {
+        val targetState = if (configRepository.isFollowUpReplyEnabled()) {
+            EngineState.CHECKING_INBOX
+        } else {
+            EngineState.SCANNING
+        }
+        if (stateMachine.transitionTo(targetState, "恢复执行")) {
             configRepository.setPaused(false)
             broadcastStepLog("▶️ 流水线已恢复")
         }
@@ -200,9 +211,15 @@ class TaskDispatcher(
             // 检查今日打招呼配额
             val maxLimit = configRepository.getMaxDailyGreetings()
             if (!jobRepository.canGreetMoreToday(maxLimit)) {
-                broadcastStepLog("今日打招呼已达最大上限 ($maxLimit 次)，转为【仅消息值守模式】(5s后复查)...")
-                delay(5000L)
-                continue // 配额用尽时，不打新招呼，但持续值守新回复！
+                if (configRepository.isFollowUpReplyEnabled()) {
+                    broadcastStepLog("今日打招呼已达最大上限 ($maxLimit 次)，转为【仅消息值守模式】(5s后复查)...")
+                    delay(5000L)
+                    continue // 配额用尽时，不打新招呼，但持续值守新回复！
+                } else {
+                    broadcastStepLog("今日打招呼已达最大上限 ($maxLimit 次)，且未开启跟进回复，工作流结束")
+                    stop()
+                    break
+                }
             }
 
             // 🌟【循环第二阶段】：低优先级！切往职位推荐流，巡查当前屏幕的岗位并破冰
@@ -216,6 +233,11 @@ class TaskDispatcher(
      * 高优先级：巡查并清空全部未读消息
      */
     private suspend fun drainAllUnreadMessages() {
+        // 🌟 开关研判：未开启跟进回复时，跳过切往消息信箱与消息读取
+        if (!configRepository.isFollowUpReplyEnabled()) {
+            return
+        }
+
         val service = BossAccessibilityService.instance ?: return
 
         // 1. 确保切到底部 Tab 3【消息】
