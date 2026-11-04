@@ -12,7 +12,7 @@ import com.lulu.agent.accessibility.util.GestureEngine
  * 打招呼与个性化破冰发送闭环任务 (支持双重送达校验：消除 Hint 占位符误判与气泡上屏校验)
  */
 class SendGreetingTask(
-    private val greetingText: String,
+    private val greetingText: String? = null,
     private val autoNavigateBack: Boolean = true,
     private val onComplete: (() -> Unit)? = null,
     private val onError: ((String) -> Unit)? = null
@@ -20,6 +20,7 @@ class SendGreetingTask(
 
     private val tag = "SendGreetingTask"
     private var sendClickAttempts = 0
+    private var waitWindowAttempts = 0
 
     companion object {
         private const val STEP_INIT_AND_CLICK_CHAT = 1
@@ -63,7 +64,12 @@ class SendGreetingTask(
         if (!editNodes.isNullOrEmpty()) {
             editNodes.forEach { it.recycle() }
             root.recycle()
-            sendStep(STEP_INPUT_GREETING_TEXT, 150L)
+            if (greetingText.isNullOrBlank()) {
+                sendTaskMessage("已处于聊天界面，无需输入定制内容，直接退回...")
+                sendStep(STEP_HANDLE_NAVIGATE_BACK, 300L)
+            } else {
+                sendStep(STEP_INPUT_GREETING_TEXT, 150L)
+            }
             return
         }
 
@@ -71,6 +77,16 @@ class SendGreetingTask(
         val chatBtn = chatBtnNodes?.firstOrNull()
 
         if (chatBtn != null) {
+            val btnText = chatBtn.text?.toString() ?: ""
+            // 如果已是“继续沟通”，且不需要输入定制内容，直接完成
+            if (greetingText.isNullOrBlank() && btnText.contains("继续沟通")) {
+                chatBtnNodes.forEach { it.recycle() }
+                root.recycle()
+                sendTaskMessage("岗位已处于沟通状态，无需定制回复")
+                sendStep(STEP_HANDLE_NAVIGATE_BACK, 200L)
+                return
+            }
+
             sendTaskMessage("点击【立即沟通】按钮...")
             val clicked = GestureEngine.performClick(
                 service = service,
@@ -98,6 +114,7 @@ class SendGreetingTask(
     }
 
     private fun handleWaitWindowOrPopup() {
+        waitWindowAttempts++
         val root = service.rootInActiveWindow
         if (root == null) {
             retryCurrentStep(400L, "等待界面渲染")
@@ -108,7 +125,12 @@ class SendGreetingTask(
         if (!editNodes.isNullOrEmpty()) {
             editNodes.forEach { it.recycle() }
             root.recycle()
-            sendStep(STEP_INPUT_GREETING_TEXT, 150L)
+            if (greetingText.isNullOrBlank()) {
+                sendTaskMessage("已进入沟通窗口，直接安全退回...")
+                sendStep(STEP_HANDLE_NAVIGATE_BACK, 300L)
+            } else {
+                sendStep(STEP_INPUT_GREETING_TEXT, 150L)
+            }
             return
         }
 
@@ -126,7 +148,12 @@ class SendGreetingTask(
                 onSuccess = {
                     confirmPopupBtn.recycle()
                     root.recycle()
-                    nextStep(850L)
+                    if (greetingText.isNullOrBlank()) {
+                        sendTaskMessage("已点击确认发招呼，正在安全退回...")
+                        sendStep(STEP_HANDLE_NAVIGATE_BACK, 850L)
+                    } else {
+                        nextStep(850L)
+                    }
                 },
                 onFail = {
                     confirmPopupBtn.recycle()
@@ -137,11 +164,29 @@ class SendGreetingTask(
             return
         }
 
+        // 🌟 关闭自动生成岗位回答时：若点击沟通后未跳出弹窗且未跳聊天页（如直接沟通生效），在检查按钮状态后安全完成
+        if (greetingText.isNullOrBlank() && waitWindowAttempts >= 2) {
+            val chatBtnNodes = root.findAccessibilityNodeInfosByViewId(ID_BTN_CHAT)
+            val btnText = chatBtnNodes?.firstOrNull()?.text?.toString() ?: ""
+            chatBtnNodes?.forEach { it.recycle() }
+            root.recycle()
+
+            if (btnText.contains("继续沟通") || waitWindowAttempts >= 3) {
+                sendTaskMessage("立即沟通点击生效，无需生成个性化内容")
+                sendStep(STEP_HANDLE_NAVIGATE_BACK, 300L)
+                return
+            }
+        }
+
         root.recycle()
         retryCurrentStep(500L, "等待进入聊天窗口...")
     }
 
     private fun handleInputGreetingText() {
+        if (greetingText.isNullOrBlank()) {
+            sendStep(STEP_HANDLE_NAVIGATE_BACK, 150L)
+            return
+        }
         val root = service.rootInActiveWindow
         if (root == null) {
             retryCurrentStep(400L, "窗口未就绪")
@@ -274,6 +319,10 @@ class SendGreetingTask(
      * 步骤 5：智能双重送达校验 (彻底解决 Hint 提示词导致的误判死循环)
      */
     private fun handleVerifyAndFinish() {
+        if (greetingText.isNullOrBlank()) {
+            sendStep(STEP_HANDLE_NAVIGATE_BACK, 200L)
+            return
+        }
         val root = service.rootInActiveWindow
         val editNodes = root?.findAccessibilityNodeInfosByViewId(ID_EDIT_TEXT)
         val editNode = editNodes?.firstOrNull()

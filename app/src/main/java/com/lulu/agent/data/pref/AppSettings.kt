@@ -44,6 +44,18 @@ class AppSettings(context: Context) {
     fun isPaused(): Boolean = prefs.getBoolean(KEY_IS_PAUSED, false)
     fun setPaused(paused: Boolean) = prefs.edit().putBoolean(KEY_IS_PAUSED, paused).apply()
 
+    /**
+     * 是否跟进回复：开启后优先巡检并答复未读信箱；关闭则跳过消息列表巡查
+     */
+    fun isFollowUpReplyEnabled(): Boolean = prefs.getBoolean(KEY_FOLLOW_UP_REPLY, true)
+    fun setFollowUpReplyEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_FOLLOW_UP_REPLY, enabled).apply()
+
+    /**
+     * 是否自动生成岗位回答：开启后结合JD智能生成针对性破冰语；关闭则直接点击【立即沟通】
+     */
+    fun isAutoGenerateGreeting(): Boolean = prefs.getBoolean(KEY_AUTO_GENERATE_GREETING, true)
+    fun setAutoGenerateGreeting(enabled: Boolean) = prefs.edit().putBoolean(KEY_AUTO_GENERATE_GREETING, enabled).apply()
+
     companion object {
         private const val PREFS_NAME = "boss_agent_settings"
         private const val KEY_SLIDE_RATE = "slideRate"
@@ -51,6 +63,8 @@ class AppSettings(context: Context) {
         private const val KEY_MIN_SALARY_K = "min_salary_k"
         private const val KEY_FILTER_OUTSOURCING = "filter_outsourcing"
         private const val KEY_IS_PAUSED = "isPause"
+        private const val KEY_FOLLOW_UP_REPLY = "follow_up_reply"
+        private const val KEY_AUTO_GENERATE_GREETING = "auto_generate_greeting"
 
         @Volatile
         private var instance: AppSettings? = null

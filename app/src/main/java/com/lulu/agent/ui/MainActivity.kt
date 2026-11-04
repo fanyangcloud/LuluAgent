@@ -12,15 +12,19 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.lulu.agent.LuluApp
@@ -44,8 +48,11 @@ class MainActivity : AppCompatActivity() {
     private val bossPackage = "com.hpbr.bosszhipin"
 
     // UI 引用
+    private lateinit var subtitleTv: TextView
     private lateinit var accessibilityBtn: TextView
     private lateinit var overlayBtn: TextView
+    private lateinit var followUpReplySwitch: SwitchCompat
+    private lateinit var autoGreetingSwitch: SwitchCompat
     private lateinit var statusTextTv: TextView
     private lateinit var percentageTv: TextView
     private lateinit var mainActionButton: TextView
@@ -126,6 +133,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         contentLayout.addView(createPreparednessCard())
+        contentLayout.addView(createStrategyConfigCard())
         contentLayout.addView(createRunningStatusCard())
         contentLayout.addView(createDataDashboardCard())
 
@@ -154,7 +162,7 @@ class MainActivity : AppCompatActivity() {
                 includeFontPadding = false
             }
 
-            val subtitle = TextView(this@MainActivity).apply {
+            subtitleTv = TextView(this@MainActivity).apply {
                 text = "全双工协同：先答复来信，再主动探路"
                 textSize = 12f
                 setTextColor(colorTextSub)
@@ -166,7 +174,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             titleCol.addView(title)
-            titleCol.addView(subtitle)
+            titleCol.addView(subtitleTv)
 
             val gearBtn = TextView(this@MainActivity).apply {
                 text = "⚙️"
@@ -325,6 +333,150 @@ class MainActivity : AppCompatActivity() {
         row.addView(actionBtn)
 
         return Pair(row, actionBtn)
+    }
+
+    /**
+     * 协同与投递策略卡片 (提供跟进回复与自动生成岗位回答两个核心开关)
+     */
+    private fun createStrategyConfigCard(): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = createCardDrawable()
+            setPadding(dp2px(16), dp2px(16), dp2px(16), dp2px(16))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp2px(10) }
+        }
+
+        val headerTv = TextView(this).apply {
+            text = "协同与投递策略"
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(colorTextSub)
+            includeFontPadding = false
+        }
+        card.addView(headerTv)
+
+        val app = application as LuluApp
+
+        val (row1, switch1) = createStrategyRow(
+            icon = "💬",
+            title = "跟进回复消息",
+            desc = "开启后巡检并答复消息；关闭则跳过消息列表",
+            initialChecked = app.configRepository.isFollowUpReplyEnabled(),
+            onCheckedChange = { isChecked ->
+                app.configRepository.setFollowUpReplyEnabled(isChecked)
+                updateSubtitle(isChecked)
+            }
+        )
+        followUpReplySwitch = switch1
+
+        val divider = View(this).apply {
+            setBackgroundColor(colorCardStroke)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp2px(1)
+            ).apply {
+                topMargin = dp2px(10)
+                bottomMargin = dp2px(10)
+            }
+        }
+
+        val (row2, switch2) = createStrategyRow(
+            icon = "✨",
+            title = "自动生成岗位回答",
+            desc = "开启后结合JD生成破冰语；关闭则直接点击立即沟通",
+            initialChecked = app.configRepository.isAutoGenerateGreeting(),
+            onCheckedChange = { isChecked ->
+                app.configRepository.setAutoGenerateGreeting(isChecked)
+            }
+        )
+        autoGreetingSwitch = switch2
+
+        card.addView(row1)
+        card.addView(divider)
+        card.addView(row2)
+
+        return card
+    }
+
+    private fun createStrategyRow(
+        icon: String,
+        title: String,
+        desc: String,
+        initialChecked: Boolean,
+        onCheckedChange: (Boolean) -> Unit
+    ): Pair<View, SwitchCompat> {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp2px(10) }
+        }
+
+        val iconTv = TextView(this).apply {
+            text = icon
+            textSize = 16f
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            layoutParams = LinearLayout.LayoutParams(dp2px(26), dp2px(26))
+        }
+
+        val textCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp2px(8)
+                marginEnd = dp2px(8)
+            }
+        }
+
+        val titleTv = TextView(this).apply {
+            text = title
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(colorTextMain)
+            includeFontPadding = false
+        }
+
+        val descTv = TextView(this).apply {
+            text = desc
+            textSize = 11f
+            setTextColor(colorTextSub)
+            includeFontPadding = false
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp2px(2) }
+        }
+
+        textCol.addView(titleTv)
+        textCol.addView(descTv)
+
+        val switchView = SwitchCompat(this).apply {
+            isChecked = initialChecked
+            setOnCheckedChangeListener { _, isChecked ->
+                onCheckedChange(isChecked)
+            }
+        }
+
+        row.addView(iconTv)
+        row.addView(textCol)
+        row.addView(switchView)
+
+        return Pair(row, switchView)
+    }
+
+    private fun updateSubtitle(isFollowUpEnabled: Boolean) {
+        if (::subtitleTv.isInitialized) {
+            subtitleTv.text = if (isFollowUpEnabled) {
+                "全双工协同：先答复来信，再主动探路"
+            } else {
+                "单向极速探索：跳过消息巡查，全速探路"
+            }
+        }
     }
 
     private fun createRunningStatusCard(): View {
@@ -596,6 +748,20 @@ class MainActivity : AppCompatActivity() {
         val state = app.stateMachine.getCurrentState()
         updateEngineStateUi(state)
 
+        if (::followUpReplySwitch.isInitialized) {
+            val isFollowUp = app.configRepository.isFollowUpReplyEnabled()
+            if (followUpReplySwitch.isChecked != isFollowUp) {
+                followUpReplySwitch.isChecked = isFollowUp
+            }
+            updateSubtitle(isFollowUp)
+        }
+        if (::autoGreetingSwitch.isInitialized) {
+            val isAutoGreeting = app.configRepository.isAutoGenerateGreeting()
+            if (autoGreetingSwitch.isChecked != isAutoGreeting) {
+                autoGreetingSwitch.isChecked = isAutoGreeting
+            }
+        }
+
         loadDashboardData(app)
     }
 
@@ -696,7 +862,12 @@ class MainActivity : AppCompatActivity() {
 
         if (currentState == EngineState.PAUSED) {
             app.taskDispatcher.resume()
-            updateEngineStateUi(EngineState.CHECKING_INBOX)
+            val targetState = if (app.configRepository.isFollowUpReplyEnabled()) {
+                EngineState.CHECKING_INBOX
+            } else {
+                EngineState.SCANNING
+            }
+            updateEngineStateUi(targetState)
             return
         }
 
@@ -734,9 +905,19 @@ class MainActivity : AppCompatActivity() {
 
         FloatingHUDService.startService(this)
         app.taskDispatcher.start(warmUpDelayMs = 4000L)
-        updateEngineStateUi(EngineState.CHECKING_INBOX)
+        val initialEngineState = if (app.configRepository.isFollowUpReplyEnabled()) {
+            EngineState.CHECKING_INBOX
+        } else {
+            EngineState.SCANNING
+        }
+        updateEngineStateUi(initialEngineState)
 
-        Toast.makeText(this, "🚀 鹿鹿已启航，优先巡检回复消息...", Toast.LENGTH_SHORT).show()
+        val startToast = if (app.configRepository.isFollowUpReplyEnabled()) {
+            "🚀 鹿鹿已启航，优先巡检回复消息..."
+        } else {
+            "🚀 鹿鹿已启航，直接巡检推荐岗位..."
+        }
+        Toast.makeText(this, startToast, Toast.LENGTH_SHORT).show()
     }
 
     private fun showSettingsDialog() {
@@ -804,6 +985,12 @@ class MainActivity : AppCompatActivity() {
         container.addView(createSettingItem("📝", "个人简历与背景设定") {
             startActivity(Intent(this, ResumeEditorActivity::class.java))
         })
+        val app = application as LuluApp
+        val currentMax = app.configRepository.getMaxDailyGreetings()
+        container.addView(createSettingItem("🎯", "每日打招呼上限 (${currentMax}次)") {
+            showMaxDailyGreetingsDialog(app)
+        })
+
         container.addView(createSettingItem("🔋", "忽略电池优化 (防断流)") {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 try {
@@ -822,6 +1009,35 @@ class MainActivity : AppCompatActivity() {
         dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.85).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.show()
+    }
+
+    /**
+     * 设置每日打招呼上限（不做区间/窗口校验，仅确保为正整数即可保存）
+     */
+    private fun showMaxDailyGreetingsDialog(app: LuluApp) {
+        val currentMax = app.configRepository.getMaxDailyGreetings()
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(currentMax.toString())
+            setSelection(text.length)
+            setPadding(dp2px(16), dp2px(12), dp2px(16), dp2px(12))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("每日打招呼上限")
+            .setMessage("请输入单日主动沟通配额（无强制上限限制）：")
+            .setView(input)
+            .setPositiveButton("保存") { _, _ ->
+                val count = input.text.toString().toIntOrNull()
+                if (count != null && count > 0) {
+                    app.configRepository.setMaxDailyGreetings(count)
+                    loadDashboardData(app)
+                    Toast.makeText(this, "每日上限已设为 $count 次", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "请输入有效的数字", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private val statusReceiver = object : BroadcastReceiver() {
