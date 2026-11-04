@@ -12,14 +12,17 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RelativeLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
@@ -982,6 +985,12 @@ class MainActivity : AppCompatActivity() {
         container.addView(createSettingItem("📝", "个人简历与背景设定") {
             startActivity(Intent(this, ResumeEditorActivity::class.java))
         })
+        val app = application as LuluApp
+        val currentMax = app.configRepository.getMaxDailyGreetings()
+        container.addView(createSettingItem("🎯", "每日打招呼上限 (${currentMax}次)") {
+            showMaxDailyGreetingsDialog(app)
+        })
+
         container.addView(createSettingItem("🔋", "忽略电池优化 (防断流)") {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 try {
@@ -1000,6 +1009,35 @@ class MainActivity : AppCompatActivity() {
         dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.85).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.show()
+    }
+
+    /**
+     * 设置每日打招呼上限（不做区间/窗口校验，仅确保为正整数即可保存）
+     */
+    private fun showMaxDailyGreetingsDialog(app: LuluApp) {
+        val currentMax = app.configRepository.getMaxDailyGreetings()
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(currentMax.toString())
+            setSelection(text.length)
+            setPadding(dp2px(16), dp2px(12), dp2px(16), dp2px(12))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("每日打招呼上限")
+            .setMessage("请输入单日主动沟通配额（无强制上限限制）：")
+            .setView(input)
+            .setPositiveButton("保存") { _, _ ->
+                val count = input.text.toString().toIntOrNull()
+                if (count != null && count > 0) {
+                    app.configRepository.setMaxDailyGreetings(count)
+                    loadDashboardData(app)
+                    Toast.makeText(this, "每日上限已设为 $count 次", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "请输入有效的数字", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private val statusReceiver = object : BroadcastReceiver() {
