@@ -17,7 +17,7 @@ import com.lulu.agent.llm.model.response.DialogueReplyResponse
 import kotlinx.coroutines.CompletableDeferred
 
 /**
- * 谈判公关代表：负责初次破冰打招呼与多轮深入沟通应答（含智能熔断）
+ * 谈判公关代表：负责初次破冰打招呼与多轮深入沟通应答（含智能熔断与附件简历投递）
  */
 class CommunicatorAgent(
     context: Context,
@@ -155,10 +155,20 @@ class CommunicatorAgent(
                 },
                 onFailure = { err ->
                     Log.w(tag, "LLM回复生成降级: ${err.message}")
-                    finalReplyText = "好的，收到您的信息，非常期待与您及团队进一步探讨岗位细节！"
+                    if (IntentClassifier.classify(session.lastMessage).intent == IntentClassifier.RecruiterIntent.ASK_RESUME) {
+                        finalDecision = DialogueReplyResponse.DECISION_SEND_RESUME
+                        finalReplyText = "好的，这就将我的最新附件简历发送给您，期待与您进一步交流！"
+                    } else {
+                        finalReplyText = "好的，收到您的信息，非常期待与您及团队进一步探讨岗位细节！"
+                    }
                 }
             )
         }
+
+        // 判定是否需要同步发送附件简历（LLM 决策为 SEND_RESUME 或本地关键词明确命中索要简历，且未触发熔断）
+        val isLocalAskResume = IntentClassifier.classify(session.lastMessage).intent == IntentClassifier.RecruiterIntent.ASK_RESUME
+        val shouldSendResume = finalDecision != DialogueReplyResponse.DECISION_REJECT &&
+                (finalDecision == DialogueReplyResponse.DECISION_SEND_RESUME || isLocalAskResume)
 
         // 6. 派发无障碍单聊任务 ChatDialogueTask
         val service = BossAccessibilityService.instance
@@ -169,29 +179,40 @@ class CommunicatorAgent(
             return
         }
 
-        val sendDeferred = CompletableDeferred<Boolean>()
+        var isSent = false
+        var isResumeSent = false
+        val taskDeferred = CompletableDeferred<Unit>()
         val dialogueTask = ChatDialogueTask(
             session = session,
             replyText = finalReplyText,
-            onMessageSent = { sendDeferred.complete(true) },
-            onBackCompleted = { /* 成功后退 */ },
-            onError = { sendDeferred.complete(false) }
+            sendResume = shouldSendResume,
+            onMessageSent = { isSent = true },
+            onResumeSent = { isResumeSent = true },
+            onBackCompleted = { taskDeferred.complete(Unit) },
+            onError = { taskDeferred.complete(Unit) }
         )
 
         service.executeTask(dialogueTask)
-        val isSent = sendDeferred.await()
+        taskDeferred.await()
 
         if (isSent) {
             // 7. 落库自己发出的消息
             jobRepository.recordChatMessage(jobId, ChatMessageEntity.ROLE_ME, finalReplyText)
 
-            if (finalDecision == DialogueReplyResponse.DECISION_REJECT) {
-                // 执行数据库拉黑熔断
-                jobRepository.closeChatSession(jobId, rejectReason)
-                sendAgentLog("🚨 岗位已执行熔断拉黑！原因: $rejectReason", isHighlight = true)
-            } else {
-                jobRepository.updateChatActivity(jobId)
-                sendAgentLog("💬 成功答复【$hrName】: $finalReplyText")
+            when {
+                finalDecision == DialogueReplyResponse.DECISION_REJECT -> {
+                    // 执行数据库拉黑熔断
+                    jobRepository.closeChatSession(jobId, rejectReason)
+                    sendAgentLog("🚨 岗位已执行熔断拉黑！原因: $rejectReason", isHighlight = true)
+                }
+                isResumeSent -> {
+                    jobRepository.markJobDelivered(jobId)
+                    sendAgentLog("📄 已向【$hrName】回复并发送最新附件简历！", isHighlight = true)
+                }
+                else -> {
+                    jobRepository.updateChatActivity(jobId)
+                    sendAgentLog("💬 成功答复【$hrName】: $finalReplyText")
+                }
             }
             onSuccess()
         } else {
