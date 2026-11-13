@@ -15,7 +15,12 @@ class JobRepository(private val db: AppDatabase) {
     private val jobDao = db.jobDao()
     private val companyDao = db.companyDao()
     private val llmAuditDao = db.llmAuditDao()
-    private val chatMessageDao = db.chatMessageDao() // 🌟 注入聊天 DAO
+    private val chatMessageDao = db.chatMessageDao()
+
+    companion object {
+        private const val ROLE_ME_ACTION = "ME_ACTION"
+        const val RESUME_SENT_MARKER = "[已发送附件简历]"
+    }
 
     // ==================== 1. 岗位发现与状态流转 ====================
 
@@ -88,7 +93,7 @@ class JobRepository(private val db: AppDatabase) {
         )
     }
 
-    // ==================== 2. 多轮对话与上下文记忆（新增） ====================
+    // ==================== 2. 多轮对话与上下文记忆 ====================
 
     /**
      * 登记单条对话气泡记录（内置去重，防止每次进入房间重复写入旧消息）
@@ -119,6 +124,24 @@ class JobRepository(private val db: AppDatabase) {
         } else {
             false
         }
+    }
+
+    /**
+     * 校验该岗位会话是否已经发送过附件简历（持久化防重锁）
+     */
+    suspend fun hasResumeAttachmentSent(jobId: String): Boolean = withContext(Dispatchers.IO) {
+        chatMessageDao.isMessageExists(jobId, ROLE_ME_ACTION, RESUME_SENT_MARKER)
+    }
+
+    /**
+     * 标记该岗位会话已发送附件简历（写入对话上下文供大模型感知，并更新岗位为已投递）
+     */
+    suspend fun markResumeAttachmentSent(
+        jobId: String,
+        timestamp: Long = System.currentTimeMillis()
+    ) = withContext(Dispatchers.IO) {
+        recordChatMessage(jobId, ROLE_ME_ACTION, RESUME_SENT_MARKER, timestamp)
+        jobDao.updateStatus(jobId, JobEntity.STATUS_DELIVERED)
     }
 
     /**

@@ -17,7 +17,7 @@ import com.lulu.agent.llm.model.response.DialogueReplyResponse
 import kotlinx.coroutines.CompletableDeferred
 
 /**
- * 谈判公关代表：负责初次破冰打招呼与多轮深入沟通应答（含智能熔断与附件简历投递）
+ * 谈判公关代表：负责初次破冰打招呼与多轮深入沟通应答（含智能熔断与单次附件简历投递）
  */
 class CommunicatorAgent(
     context: Context,
@@ -126,8 +126,9 @@ class CommunicatorAgent(
         // 2. 绑定或动态补全本地 JobEntity
         jobRepository.findOrCreateJobFromChat(session.jobTitle, session.companyName, session.salaryText)
 
-        // 3. 登记 HR 最新发来的留言
+        // 3. 登记 HR 最新发来的留言，并检查该会话此前是否已经发过附件简历
         jobRepository.recordChatMessage(jobId, ChatMessageEntity.ROLE_HR, session.lastMessage)
+        val hasAlreadySentResume = jobRepository.hasResumeAttachmentSent(jobId)
 
         // 4. 第一层：本地 0-Token 快速敏感词熔断检测
         val matchedRejectWord = checkQuickRejectKeywords("${session.companyName} ${session.jobTitle} ${session.lastMessage}")
@@ -155,7 +156,9 @@ class CommunicatorAgent(
                 },
                 onFailure = { err ->
                     Log.w(tag, "LLM回复生成降级: ${err.message}")
-                    if (IntentClassifier.classify(session.lastMessage).intent == IntentClassifier.RecruiterIntent.ASK_RESUME) {
+                    if (!hasAlreadySentResume &&
+                        IntentClassifier.classify(session.lastMessage).intent == IntentClassifier.RecruiterIntent.ASK_RESUME
+                    ) {
                         finalDecision = DialogueReplyResponse.DECISION_SEND_RESUME
                         finalReplyText = "好的，这就将我的最新附件简历发送给您，期待与您进一步交流！"
                     } else {
@@ -165,10 +168,9 @@ class CommunicatorAgent(
             )
         }
 
-        // 判定是否需要同步发送附件简历（LLM 决策为 SEND_RESUME 或本地关键词明确命中索要简历，且未触发熔断）
-        val isLocalAskResume = IntentClassifier.classify(session.lastMessage).intent == IntentClassifier.RecruiterIntent.ASK_RESUME
-        val shouldSendResume = finalDecision != DialogueReplyResponse.DECISION_REJECT &&
-                (finalDecision == DialogueReplyResponse.DECISION_SEND_RESUME || isLocalAskResume)
+        // 硬性防重锁：仅当此前未发过附件简历、且决策明确为 SEND_RESUME 时才执行发简历动作
+        val shouldSendResume = !hasAlreadySentResume &&
+                finalDecision == DialogueReplyResponse.DECISION_SEND_RESUME
 
         // 6. 派发无障碍单聊任务 ChatDialogueTask
         val service = BossAccessibilityService.instance
@@ -197,7 +199,8 @@ class CommunicatorAgent(
 
         if (isSent) {
             // 7. 落库自己发出的消息
-            jobRepository.recordChatMessage(jobId, ChatMessageEntity.ROLE_ME, finalReplyText)
+            val now = System.currentTimeMillis()
+            jobRepository.recordChatMessage(jobId, ChatMessageEntity.ROLE_ME, finalReplyText, timestamp = now)
 
             when {
                 finalDecision == DialogueReplyResponse.DECISION_REJECT -> {
@@ -206,8 +209,9 @@ class CommunicatorAgent(
                     sendAgentLog("🚨 岗位已执行熔断拉黑！原因: $rejectReason", isHighlight = true)
                 }
                 isResumeSent -> {
-                    jobRepository.markJobDelivered(jobId)
-                    sendAgentLog("📄 已向【$hrName】回复并发送最新附件简历！", isHighlight = true)
+                    // 持久化写入“[已发送附件简历]”标记（时间戳+1确保排在回复话术之后）
+                    jobRepository.markResumeAttachmentSent(jobId, timestamp = now + 1)
+                    sendAgentLog("📄 已向【$hrName】回复并发送附件简历！", isHighlight = true)
                 }
                 else -> {
                     jobRepository.updateChatActivity(jobId)
