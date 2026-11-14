@@ -155,7 +155,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             val subtitle = TextView(this@MainActivity).apply {
-                text = "全双工协同：先答复来信，再主动探路"
+                text = "深呼吸，今天也会遇到懂你的好伯乐"
                 textSize = 12f
                 setTextColor(colorTextSub)
                 includeFontPadding = false
